@@ -548,11 +548,11 @@ class PerlerBeadDetector:
         # 填充颜色并绘制网格线
         for i in range(rows):
             for j in range(cols):
-                r, g, b = colors[i][j]
+                b, g, r = colors[i][j]  # colors 中存储的是 BGR
                 # 填充方格
                 y1, y2 = i * cell_size, (i + 1) * cell_size
                 x1, x2 = j * cell_size, (j + 1) * cell_size
-                result_image[y1:y2, x1:x2] = [r, g, b]
+                result_image[y1:y2, x1:x2] = [b, g, r]
         
         # 绘制网格线
         grid_color = [0, 0, 0]  # 黑色网格线
