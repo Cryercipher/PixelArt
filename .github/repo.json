@@ -1,0 +1,41 @@
+{
+  "name": "PixelArt Detector",
+  "description": "自动识别拼豆图纸的网格线和颜色，输出为矢量图 SVG",
+  "homepage": "https://github.com/yourusername/PixelArt",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/PixelArt.git"
+  },
+  "keywords": [
+    "perler-beads",
+    "拼豆",
+    "image-processing",
+    "grid-detection",
+    "color-recognition",
+    "opencv",
+    "svg"
+  ],
+  "topics": [
+    "image-processing",
+    "computer-vision",
+    "opencv",
+    "python",
+    "perler-beads",
+    "svg",
+    "craft"
+  ],
+  "license": "MIT",
+  "funding": {
+    "custom": [
+      "https://www.buymeacoffee.com/yourusername"
+    ]
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/PixelArt/issues"
+  },
+  "author": "PixelArt Contributors",
+  "versions": {
+    "current": "2.0.0",
+    "python": "3.8+"
+  }
+}

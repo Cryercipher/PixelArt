@@ -67,8 +67,23 @@ dist/
 .pytest_cache/
 htmlcov/
 .coverage
+*.coverage.*
 
 # 编辑器备份
 *.bak
 *.backup
 *~
+
+# 临时文件
+*.tmp
+*.temp
+*.log
+
+# macOS
+.AppleDouble
+.LSOverride
+*.swp
+
+# VS Code
+.vscode/settings.json
+.vscode/extensions.json

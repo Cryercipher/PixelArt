@@ -1,9 +1,12 @@
 # 🎨 拼豆图纸识别工具（PixelArt Detector）
 
-一个自动识别拼豆图纸的工具，可以将拼豆图纸图片转换为矢量图（SVG）和颜色统计。
-
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/yourusername/PixelArt?include_prereleases)](https://github.com/yourusername/PixelArt/releases)
+[![GitHub Last Commit](https://img.shields.io/github/last-commit/yourusername/PixelArt)](https://github.com/yourusername/PixelArt/commits/main)
+[![GitHub Stars](https://img.shields.io/github/stars/yourusername/PixelArt)](https://github.com/yourusername/PixelArt/stargazers)
+
+一个自动识别拼豆图纸的工具，可以将拼豆图纸图片转换为矢量图（SVG）和颜色统计。
 
 ## ✨ 功能特点
 
