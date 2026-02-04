@@ -532,8 +532,6 @@ class PerlerBeadDetector:
             result: 检测结果
             output_path: 输出路径
         """
-        import matplotlib.pyplot as plt
-        
         # 读取原图
         image = cv2.imread(image_path)
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -572,28 +570,52 @@ class PerlerBeadDetector:
             if x < result_image.shape[1]:
                 result_image[:, max(0, x-line_width//2):min(result_image.shape[1], x+line_width//2+1)] = grid_color
         
-        # 显示对比
-        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        # 使用 PIL 合成对比图（支持中文）
+        from PIL import Image as PILImage, ImageDraw, ImageFont
         
-        # 设置中文字体
-        try:
-            plt.rcParams['font.sans-serif'] = ['SimHei', 'STHeiti', 'DejaVu Sans']
-            plt.rcParams['axes.unicode_minus'] = False
-        except:
-            pass
+        h1, w1 = image_rgb.shape[:2]
+        h2, w2 = result_image.shape[:2]
         
-        axes[0].imshow(image_rgb)
-        axes[0].set_title('原始图片')
-        axes[0].axis('off')
+        padding = 40
+        label_h = 30
         
-        axes[1].imshow(result_image)
-        axes[1].set_title(f'识别结果 ({rows}x{cols})')
-        axes[1].axis('off')
+        # 创建合成图
+        canvas_w = w1 + w2 + 3 * padding
+        canvas_h = max(h1, h2) + label_h + 2 * padding
         
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        canvas = PILImage.new('RGB', (canvas_w, canvas_h), (255, 255, 255))
+        
+        # 转换图片为 PIL
+        img1_pil = PILImage.fromarray(image_rgb)
+        img2_pil = PILImage.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))
+        
+        # 粘贴图片
+        canvas.paste(img1_pil, (padding, padding + label_h))
+        canvas.paste(img2_pil, (w1 + 2 * padding, padding + label_h))
+        
+        # 绘制文字
+        draw = ImageDraw.Draw(canvas)
+        
+        # 尝试加载中文字体
+        font = None
+        for font_name in ['/System/Library/Fonts/SimHei.ttf', 
+                          '/System/Library/Fonts/STHeiti Light.ttc',
+                          '/Library/Fonts/Arial.ttf']:
+            try:
+                font = ImageFont.truetype(font_name, 14)
+                break
+            except:
+                pass
+        
+        if font is None:
+            font = ImageFont.load_default()
+        
+        # 绘制标签
+        draw.text((padding, padding - 5), '原始图片', fill=(0, 0, 0), font=font)
+        draw.text((w1 + 2 * padding, padding - 5), f'识别结果 ({rows}x{cols})', fill=(0, 0, 0), font=font)
+        
+        canvas.save(output_path, quality=95)
         print(f"可视化结果已保存到: {output_path}")
-        plt.close()
 
 
 if __name__ == '__main__':

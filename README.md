@@ -6,9 +6,9 @@
 
 ## 功能
 
-- 🔍 智能网格检测 (Hough 变换)
-- 🎨 精准颜色识别 (K-means)
-- 📐 矢量图输出 (SVG)
+- 🔍 智能网格检测
+- 🎨 精准颜色识别
+- 📐 矢量图输出
 - 📊 颜色统计和调色板
 
 ## 安装
@@ -41,7 +41,3 @@ python examples/quickstart.py
 - [算法](docs/ALGORITHM.md)
 - [问题排查](docs/TROUBLESHOOT.md)
 - [项目结构](docs/PROJECT_STRUCTURE.md)
-
-## 许可证
-
-MIT
