@@ -16,7 +16,7 @@ PixelArt/
 │   ├── TROUBLESHOOT.md          # 故障排除指南
 │   └── PROJECT_STRUCTURE.md     # 本文件
 │
-├── tests/                        # 测试（可选扩展）
+├── tests/                        # 测试
 │   └── test_*.py               # 单元测试
 │
 ├── README.md                     # 项目概述和快速开始
@@ -25,7 +25,7 @@ PixelArt/
 ├── pyproject.toml              # 项目元数据和构建配置
 ├── requirements.txt             # 依赖列表
 ├── .gitignore                   # Git 忽略规则
-└── .venv/                       # 虚拟环境（本地）
+└── .venv/                       # 虚拟环境
 ```
 
 ## 核心文件说明
@@ -114,7 +114,7 @@ perler-bead-detector
 
 ## 版本历史
 
-### v2.0.0（当前）
+### v2.0.0
 - ✅ 完整的项目结构重构
 - ✅ 文档体系完善
 - ✅ Hough 参数优化

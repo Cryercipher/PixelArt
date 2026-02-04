@@ -22,7 +22,7 @@ print(f"亮度范围: {gray.min()}-{gray.max()}")
 # 理想范围应该是 30-200 的混合
 
 # 方案 2：使用图片编辑工具调整
-# - 增加对比度（推荐）
+# - 增加对比度
 # - 调整亮度
 # - 增强边缘清晰度
 ```
@@ -41,7 +41,7 @@ print(f"垂直线: {len(result['grid_info']['v_lines'])}")
 # 应该等于 rows+1 和 cols+1
 ```
 
-**已优化的参数**（无需修改）：
+**已优化的参数**：
 ```
 threshold=50      # 霍夫变换灵敏度
 minLineLength=30  # 最小线条长度
@@ -250,7 +250,7 @@ logger.debug(f"检测到 {len(h_lines)} 条水平线")
 如果遇到问题，请提交 GitHub Issue，包含：
 
 1. Python 版本：`python --version`
-2. 操作系统：`uname -a`（Mac/Linux）或 `systeminfo`（Windows）
+2. 操作系统：`uname -a` 或 `systeminfo`
 3. 依赖版本：`pip list`
 4. 图片样本：附加小图片（不超过 2MB）
 5. 完整错误信息：包括 traceback

@@ -13,7 +13,7 @@
 ### 问题
 
 拼豆图纸的网格线样式多样：
-- 边距（margin）不同
+- 边距不同
 - 网格间距不一致
 - 某些线条模糊或断裂
 - 光照不均导致线条对比度变化
@@ -26,7 +26,7 @@
 # 灰度化
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-# 自适应阈值二值化（适应光照变化）
+# 自适应阈值二值化
 binary = cv2.adaptiveThreshold(
     gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
     cv2.THRESH_BINARY, 11, 2
@@ -81,7 +81,7 @@ lines = cv2.HoughLinesP(
 **为什么降低参数？**
 - 原始 threshold=100 无法检测弱线条
 - 原始 minLineLength=50 遗漏小格子的线
-- 这导致格子数被低估（4格变3格的问题）
+- 这导致格子数被低估
 
 #### 4. 线条聚合
 
@@ -117,7 +117,7 @@ v_positions = _filter_close_lines(v_positions, min_distance=5)
 拼豆图纸中的颜色识别面临多个挑战：
 
 1. **同一方格内颜色不均**
-   - 光照渐变（边暗中亮）
+   - 光照渐变
    - 拍照角度反光
    - JPEG 压缩伪影
 
