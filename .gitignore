@@ -7,7 +7,6 @@ test_*.png
 # 输出文件
 output.svg
 output.png
-result.png
 color_palette.txt
 
 # Python
