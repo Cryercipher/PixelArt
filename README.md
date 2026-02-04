@@ -14,7 +14,7 @@
 ## 安装
 
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 ## 使用
