@@ -5,10 +5,13 @@
 
 import cv2
 import numpy as np
-from sklearn.cluster import KMeans
+from dataclasses import replace
 from typing import List, Tuple, Dict, Optional
 import svgwrite
-from collections import Counter
+
+from .color_processing import crop_white_borders, extract_colors, merge_similar_colors
+from .config import ColorProcessingConfig, GridDetectionConfig
+from .grid_detection import detect_grid
 
 
 class PerlerBeadDetector:
@@ -26,6 +29,8 @@ class PerlerBeadDetector:
         self.max_grid_size = max_grid_size
         self.grid_data = None
         self.colors = None
+        self.grid_config = GridDetectionConfig()
+        self.color_config = ColorProcessingConfig()
         
     def process_image(self, image_path: str, debug: bool = False) -> Dict:
         """
@@ -93,144 +98,11 @@ class PerlerBeadDetector:
         Args:
             image: 输入图片
             debug: 是否显示调试图片
-            
+        
         Returns:
             包含网格信息的字典，包括行列坐标
         """
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        
-        # 使用自适应阈值二值化
-        binary = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY, 11, 2
-        )
-        
-        # 反转（黑线变白线）
-        binary = cv2.bitwise_not(binary)
-        
-        # 形态学操作：增强网格线
-        kernel_horizontal = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-        kernel_vertical = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
-        
-        # 检测水平线
-        horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_horizontal)
-        # 检测垂直线
-        vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_vertical)
-        
-        # 合并线条
-        grid_lines = cv2.addWeighted(horizontal_lines, 0.5, vertical_lines, 0.5, 0)
-        
-        if debug:
-            cv2.imshow('Binary', binary)
-            cv2.imshow('Horizontal Lines', horizontal_lines)
-            cv2.imshow('Vertical Lines', vertical_lines)
-            cv2.imshow('Grid Lines', grid_lines)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-        
-        # 使用霍夫变换检测线条
-        h_lines = self._detect_lines(horizontal_lines, angle_threshold=10, threshold=40)
-        v_lines = self._detect_lines(vertical_lines, angle_threshold=80, threshold=40)
-        
-        if len(h_lines) < 2 or len(v_lines) < 2:
-            print(f"检测到的线条不足: 水平线 {len(h_lines)}, 垂直线 {len(v_lines)}")
-            return None
-        
-        # 排序并过滤线条
-        h_positions = sorted(set([int(y) for _, y in h_lines]))
-        v_positions = sorted(set([int(x) for x, _ in v_lines]))
-        
-        # 过滤掉太近的线条（去除重复检测）
-        h_positions = self._filter_close_lines(h_positions)
-        v_positions = self._filter_close_lines(v_positions)
-        
-        print(f"检测到 {len(h_positions)} 条水平线, {len(v_positions)} 条垂直线")
-        
-        # 计算网格间距
-        if len(h_positions) > 1:
-            h_spacings = np.diff(h_positions)
-            avg_h_spacing = np.median(h_spacings)
-        else:
-            avg_h_spacing = 0
-            
-        if len(v_positions) > 1:
-            v_spacings = np.diff(v_positions)
-            avg_v_spacing = np.median(v_spacings)
-        else:
-            avg_v_spacing = 0
-        
-        print(f"平均网格间距: 水平 {avg_h_spacing:.1f}, 垂直 {avg_v_spacing:.1f}")
-        
-        return {
-            'h_positions': h_positions,
-            'v_positions': v_positions,
-            'h_lines': h_positions,
-            'v_lines': v_positions,
-            'h_spacing': avg_h_spacing,
-            'v_spacing': avg_v_spacing
-        }
-    
-    def _detect_lines(self, image: np.ndarray, angle_threshold: float = 10, threshold: int = 50) -> List[Tuple[int, int]]:
-        """
-        使用霍夫变换检测线条
-        
-        Args:
-            image: 二值化图像
-            angle_threshold: 角度阈值（度），用于过滤非水平/垂直线
-            threshold: 霍夫变换累加器阈值
-            
-        Returns:
-            线条位置列表 [(x或y坐标, 另一坐标)]
-        """
-        lines = cv2.HoughLinesP(
-            image, 
-            rho=1, 
-            theta=np.pi/180, 
-            threshold=threshold,   # 可配置的阈值
-            minLineLength=30,      # 降低从50到30，适应更小的格子
-            maxLineGap=5           # 降低从10到5，更严格地连接线条
-        )
-        
-        if lines is None:
-            return []
-        
-        detected_lines = []
-        
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            
-            # 计算角度
-            angle = np.abs(np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi)
-            
-            # 水平线 (角度接近0或180)
-            if angle < angle_threshold or angle > 180 - angle_threshold:
-                detected_lines.append((x1, (y1 + y2) // 2))
-            # 垂直线 (角度接近90)
-            elif 90 - angle_threshold < angle < 90 + angle_threshold:
-                detected_lines.append(((x1 + x2) // 2, y1))
-        
-        return detected_lines
-    
-    def _filter_close_lines(self, positions: List[int], min_distance: int = 5) -> List[int]:
-        """
-        过滤掉距离太近的线条
-        
-        Args:
-            positions: 位置列表
-            min_distance: 最小距离
-            
-        Returns:
-            过滤后的位置列表
-        """
-        if not positions:
-            return []
-        
-        filtered = [positions[0]]
-        for pos in positions[1:]:
-            if pos - filtered[-1] >= min_distance:
-                filtered.append(pos)
-        
-        return filtered
+        return detect_grid(image, debug, self.grid_config)
     
     def _extract_colors(self, image: np.ndarray, grid_info: Dict) -> List[List[Tuple[int, int, int]]]:
         """
@@ -245,127 +117,11 @@ class PerlerBeadDetector:
         Returns:
             颜色矩阵 (rows x cols)，每个元素是RGB颜色元组
         """
-        h_lines = grid_info['h_lines']
-        v_lines = grid_info['v_lines']
-        
-        rows = len(h_lines) - 1
-        cols = len(v_lines) - 1
-        
-        colors = []
-        
-        for i in range(rows):
-            row_colors = []
-            for j in range(cols):
-                # 获取方格区域
-                y1, y2 = h_lines[i], h_lines[i + 1]
-                x1, x2 = v_lines[j], v_lines[j + 1]
-                
-                # 计算方格大小
-                cell_height = y2 - y1
-                cell_width = x2 - x1
-                
-                # 使用动态边距裁剪，只取中心区域（避免边界颜色污染）
-                margin_percent = 0.1  # 从每条边裁剪掉25%
-                margin_y = int(cell_height * margin_percent)
-                margin_x = int(cell_width * margin_percent)
-                
-                # 确保至少有一些像素
-                margin_y = max(2, min(margin_y, cell_height // 3))
-                margin_x = max(2, min(margin_x, cell_width // 3))
-                
-                cell = image[y1+margin_y:y2-margin_y, x1+margin_x:x2-margin_x]
-                
-                if cell.size == 0:
-                    row_colors.append((255, 255, 255))
-                    continue
-                
-                # 提取主要颜色
-                color = self._get_dominant_color(cell)
-                row_colors.append(color)
-            
-            colors.append(row_colors)
-        
-        return colors
-    
-    def _get_dominant_color(self, cell: np.ndarray, n_colors: int = 1) -> Tuple[int, int, int]:
-        """
-        获取方格的主导颜色
-        
-        使用多种方法确保颜色准确并抗色号文字干扰：
-        1. 中值滤波去噪
-        2. K-means聚类分离背景色和色号文字
-        3. 选择最大簇的中心颜色（忽略色号文字）
-        4. 过滤极端颜色（黑白色号）
-        
-        Args:
-            cell: 方格图像
-            n_colors: 聚类数量
-            
-        Returns:
-            RGB颜色元组
-        """
-        # 1. 中值滤波去噪
-        cell_filtered = cv2.medianBlur(cell, 5)
-        
-        # 2. 转换为RGB并重塑
-        cell_rgb = cv2.cvtColor(cell_filtered, cv2.COLOR_BGR2RGB)
-        pixels = cell_rgb.reshape(-1, 3)
-        
-        # 3. 如果像素太少，直接返回均值
-        if len(pixels) < 10:
-            return tuple(map(int, pixels.mean(axis=0)))
-        
-        # 4. 使用K-means聚类（处理颜色差异和色号干扰）
-        try:
-            # 使用更多聚类数以更好地分离色号文字
-            n_clusters = min(5, len(pixels))  # 增加到5类，更好地区分背景和文字
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-            kmeans.fit(pixels)
-            
-            # 5. 找到最大的簇，但排除极端颜色（可能是色号文字）
-            labels = kmeans.labels_
-            label_counts = Counter(labels)
-            
-            # 按簇大小排序
-            sorted_clusters = label_counts.most_common()
-            
-            # 尝试选择最大的非极端颜色簇
-            for cluster_label, count in sorted_clusters:
-                cluster_color = kmeans.cluster_centers_[cluster_label]
-                r, g, b = cluster_color
-                
-                # 过滤极端黑色（色号常用黑色）
-                if r < 50 and g < 50 and b < 50:
-                    continue
-                
-                # 判断是否是白色/灰色：亮度高 + 色差小（无色性）
-                avg_brightness = (r + g + b) / 3
-                color_range = max(r, g, b) - min(r, g, b)
-                
-                # 白色条件：色差<20 且亮度>200
-                # 这样可以区分白色 vs 浅黄色
-                if avg_brightness > 200 and color_range < 20:
-                    # 如果是浅色簇且占比合理，认为是白色背景
-                    if count / len(pixels) > 0.3:
-                        return tuple(map(int, cluster_color))
-                    continue
-                
-                # 找到合适的背景色
-                return tuple(map(int, cluster_color))
-            
-            # 如果所有簇都被过滤了，返回最大簇
-            dominant_label = sorted_clusters[0][0]
-            dominant_color = kmeans.cluster_centers_[dominant_label]
-            return tuple(map(int, dominant_color))
-        
-        except Exception as e:
-            print(f"K-means聚类失败: {e}，使用中位数颜色")
-            # 备用方案：使用中位数
-            return tuple(map(int, np.median(pixels, axis=0)))
+        return extract_colors(image, grid_info, self.color_config)
     
     def _merge_similar_colors(self, colors: List[List[Tuple[int, int, int]]], 
-                             max_colors: int = 50, 
-                             color_threshold: int = 15) -> List[List[Tuple[int, int, int]]]:
+                             max_colors: int = 20, 
+                             color_threshold: int = 20) -> List[List[Tuple[int, int, int]]]:
         """
         合并相似的颜色，减少总颜色数量
         
@@ -377,97 +133,8 @@ class PerlerBeadDetector:
         Returns:
             合并后的颜色矩阵
         """
-        # 收集所有唯一颜色
-        all_colors = []
-        for row in colors:
-            all_colors.extend(row)
-        
-        unique_colors = list(set(all_colors))
-        
-        # 分离白色背景和其他颜色
-        white_colors = []
-        other_colors = []
-        
-        for color in unique_colors:
-            r, g, b = color
-            # 判断是否是白色：亮度高 + 色差小
-            avg_brightness = (r + g + b) / 3
-            color_range = max(r, g, b) - min(r, g, b)
-            
-            # 白色/灰色条件：色差<20 且亮度>200
-            if avg_brightness > 200 and color_range < 20:
-                white_colors.append(color)
-            else:
-                other_colors.append(color)
-        
-        print(f"检测到 {len(unique_colors)} 种颜色 (其中 {len(white_colors)} 种白色背景变种，{len(other_colors)} 种其他颜色)")
-        
-        # 如果白色变种太多，先合并它们
-        if len(white_colors) > 5:
-            print(f"合并 {len(white_colors)} 种白色背景变种...")
-            # 所有白色映射到第一个白色（或取平均值）
-            if white_colors:
-                avg_white = tuple(map(int, np.mean(white_colors, axis=0)))
-                white_color_map = {c: avg_white for c in white_colors}
-            else:
-                white_color_map = {}
-        else:
-            white_color_map = {}
-        
-        if len(unique_colors) <= max_colors:
-            print(f"颜色数量 ({len(unique_colors)}) 在合理范围内，跳过聚类")
-            # 应用白色合并
-            if white_color_map:
-                merged_colors = []
-                for row in colors:
-                    merged_row = [white_color_map.get(c, c) for c in row]
-                    merged_colors.append(merged_row)
-                return merged_colors
-            return colors
-        
-        print(f"进行全局聚类...")
-        
-        # 将颜色转换为数组
-        color_array = np.array(unique_colors)
-        
-        # 使用K-means对所有颜色进行聚类
-        try:
-            # 自动确定聚类数量
-            n_clusters = min(max_colors, len(unique_colors))
-            
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-            kmeans.fit(color_array)
-            
-            # 创建颜色映射字典
-            color_map = {}
-            for i, original_color in enumerate(unique_colors):
-                cluster_id = kmeans.labels_[i]
-                new_color = tuple(map(int, kmeans.cluster_centers_[cluster_id]))
-                
-                # 如果这是白色，优先使用白色合并的结果
-                if original_color in white_color_map:
-                    color_map[original_color] = white_color_map[original_color]
-                else:
-                    color_map[original_color] = new_color
-            
-            # 应用颜色映射
-            merged_colors = []
-            for row in colors:
-                merged_row = [color_map.get(color, color) for color in row]
-                merged_colors.append(merged_row)
-            
-            # 统计合并后的颜色数量
-            merged_unique = set()
-            for row in merged_colors:
-                merged_unique.update(row)
-            
-            print(f"合并后剩余 {len(merged_unique)} 种颜色")
-            
-            return merged_colors
-        
-        except Exception as e:
-            print(f"颜色合并失败: {e}，保持原始颜色")
-            return colors
+        config = replace(self.color_config, max_colors=max_colors, color_threshold=color_threshold)
+        return merge_similar_colors(colors, config)
     
     def save_svg(self, result: Dict, output_path: str, cell_size: int = 20, grid_width: float = 1.0):
         """
@@ -508,88 +175,20 @@ class PerlerBeadDetector:
     
     def _smart_crop(self, image: np.ndarray, max_margin: int = 3) -> np.ndarray:
         """
-        智能裁剪图片，移除白色边界和色卡
+        智能裁剪图片 - 已禁用
         
         Args:
             image: 输入图片
             max_margin: 最多保留的边距行数/列数
             
         Returns:
-            裁剪后的图片
+            原图（不裁剪）
         """
-        h, w = image.shape[:2]
-        
-        # 转换为灰度图
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        
-        # 检测白色像素（灰度>160，更激进地检测浅色背景）
-        white_mask = gray > 160
-        
-        # 计算每行/列的白色像素比例
-        white_ratio_rows = white_mask.sum(axis=1) / w
-        white_ratio_cols = white_mask.sum(axis=0) / h
-        
-        # 如果白色像素超过75%，认为是空白行/列（更激进）
-        content_rows = white_ratio_rows < 0.75
-        content_cols = white_ratio_cols < 0.75
-        
-        if not content_rows.any() or not content_cols.any():
-            # 无法检测到内容，返回原图
-            return image
-        
-        # 找到内容的边界
-        row_indices = np.where(content_rows)[0]
-        col_indices = np.where(content_cols)[0]
-        
-        if len(row_indices) == 0 or len(col_indices) == 0:
-            return image
-        
-        top = row_indices[0]
-        bottom = row_indices[-1]
-        left = col_indices[0]
-        right = col_indices[-1]
-        
-        # 从下往上扫描，如果检测到高白色比例行（>90%），则截断底部（裁掉色卡）
-        bottom_cutoff_threshold = 0.90
-        for i in range(h - 1, bottom, -1):
-            if white_ratio_rows[i] > bottom_cutoff_threshold:
-                # 找到第一个连续的高白色区域的起点
-                cutoff_row = i
-                # 继续往上找，确保找到连续白色区域的起点
-                for j in range(i - 1, bottom, -1):
-                    if white_ratio_rows[j] > bottom_cutoff_threshold:
-                        cutoff_row = j
-                    else:
-                        break
-                
-                # 只要找到连续白色区域，就从其起点截断
-                if cutoff_row <= h - 1:
-                    print(f"检测到底部色卡区域，从第{cutoff_row}行截断（裁掉{h - cutoff_row}行）")
-                    bottom = cutoff_row - 1
-                break
-        
-        # 添加最多 max_margin 行/列的边距
-        margin_top = min(max_margin, top)
-        margin_bottom = min(max_margin, h - bottom - 1)
-        margin_left = min(max_margin, left)
-        margin_right = min(max_margin, w - right - 1)
-        
-        top = max(0, top - margin_top)
-        bottom = min(h - 1, bottom + margin_bottom)
-        left = max(0, left - margin_left)
-        right = min(w - 1, right + margin_right)
-        
-        # 裁剪图片
-        cropped = image[top:bottom+1, left:right+1]
-        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
-            print(f"智能裁剪: {w}x{h} -> {cropped.shape[1]}x{cropped.shape[0]}")
-            return cropped
-        
         return image
     
     def _crop_by_grid(self, image: np.ndarray, grid_info: Dict, max_margin: int = 3) -> np.ndarray:
         """
-        根据网格信息精确裁剪图片，移除非网格区域
+        根据网格信息精确裁剪图片 - 已禁用
         
         Args:
             image: 输入图片
@@ -597,39 +196,8 @@ class PerlerBeadDetector:
             max_margin: 最多保留的边距行数/列数
             
         Returns:
-            裁剪后的图片
+            原图（不裁剪）
         """
-        h_positions = grid_info['h_positions']
-        v_positions = grid_info['v_positions']
-        
-        if len(h_positions) < 2 or len(v_positions) < 2:
-            return image
-        
-        h, w = image.shape[:2]
-        
-        # 网格的上下左右边界
-        grid_top = h_positions[0]
-        grid_bottom = h_positions[-1]
-        grid_left = v_positions[0]
-        grid_right = v_positions[-1]
-        
-        # 计算最多 max_margin 行/列的边距
-        margin_top = min(max_margin, grid_top)
-        margin_bottom = min(max_margin, h - grid_bottom - 1)
-        margin_left = min(max_margin, grid_left)
-        margin_right = min(max_margin, w - grid_right - 1)
-        
-        # 裁剪范围
-        top = max(0, grid_top - margin_top)
-        bottom = min(h - 1, grid_bottom + margin_bottom)
-        left = max(0, grid_left - margin_left)
-        right = min(w - 1, grid_right + margin_right)
-        
-        cropped = image[top:bottom+1, left:right+1]
-        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
-            print(f"网格裁剪: {w}x{h} -> {cropped.shape[1]}x{cropped.shape[0]}")
-            return cropped
-        
         return image
     
     def save_color_palette(self, result: Dict, output_path: str = 'color_palette.txt'):
@@ -667,102 +235,16 @@ class PerlerBeadDetector:
     def _crop_white_borders(self, colors: List[List[Tuple[int, int, int]]], 
                            max_margin: int = 5) -> List[List[Tuple[int, int, int]]]:
         """
-        裁剪颜色矩阵中全白色或高白色比例的边界行/列
+        裁剪颜色矩阵 - 已禁用
         
         Args:
             colors: 颜色矩阵
             max_margin: 最多保留的边距行/列数
             
         Returns:
-            裁剪后的颜色矩阵
+            原始颜色矩阵（不裁剪）
         """
-        if not colors or not colors[0]:
-            return colors
-        
-        rows = len(colors)
-        cols = len(colors[0])
-        
-        def is_white(color: Tuple[int, int, int]) -> bool:
-            """判断颜色是否为白色"""
-            r, g, b = color
-            avg = (r + g + b) / 3
-            color_range = max(r, g, b) - min(r, g, b)
-            return avg > 200 and color_range < 20
-        
-        # 计算每行的白色比例
-        row_white_ratios = []
-        for i in range(rows):
-            white_count = sum(1 for j in range(cols) if is_white(colors[i][j]))
-            row_white_ratios.append(white_count / cols)
-        
-        # 计算每列的白色比例
-        col_white_ratios = []
-        for j in range(cols):
-            white_count = sum(1 for i in range(rows) if is_white(colors[i][j]))
-            col_white_ratios.append(white_count / rows)
-        
-        # 找到内容区域（白色比例<90%的行/列）
-        threshold = 0.90
-        content_rows = [i for i in range(rows) if row_white_ratios[i] < threshold]
-        content_cols = [j for j in range(cols) if col_white_ratios[j] < threshold]
-        
-        if not content_rows or not content_cols:
-            return colors
-        
-        top = content_rows[0]
-        bottom = content_rows[-1]
-        left = content_cols[0]
-        right = content_cols[-1]
-        
-        # 从底部向上扫描，检测色卡区域和白色空白区域
-        def count_unique_colors(row: List[Tuple[int, int, int]]) -> int:
-            """计算一行中不同颜色的数量"""
-            return len(set(row))
-        
-        # 从下往上找，寻找连续的高白色区域（>70%）或纯色行（<=3种颜色）
-        # 这些是色卡或空白区域的特征
-        cutoff_row = rows
-        consecutive_empty_rows = 0
-        found_empty_region = False
-        
-        for i in range(rows - 1, top - 1, -1):
-            unique_colors = count_unique_colors(colors[i])
-            white_ratio = row_white_ratios[i]
-            
-            # 判断是否是空白/色卡行：高白色比例(>70%) 或 颜色种类很少(<=3)
-            is_empty_or_card = white_ratio > 0.70 or unique_colors <= 3
-            
-            if is_empty_or_card:
-                consecutive_empty_rows += 1
-                cutoff_row = i
-                if consecutive_empty_rows >= 8:  # 连续8行以上确认是空白区域
-                    found_empty_region = True
-            else:
-                # 遇到正常内容行
-                if found_empty_region:
-                    # 已经找到过连续空白区域，说明cutoff_row往下都是空白+色卡
-                    rows_to_crop = rows - cutoff_row
-                    if rows_to_crop > 0:
-                        print(f"检测到底部色卡/空白区域，从第{cutoff_row}行裁剪（裁掉{rows_to_crop}行）")
-                        bottom = cutoff_row - 1
-                    break
-        
-        # 添加边距
-        top = max(0, top - max_margin)
-        bottom = min(rows - 1, bottom + max_margin)
-        left = max(0, left - max_margin)
-        right = min(cols - 1, right + max_margin)
-        
-        # 裁剪矩阵
-        cropped = [row[left:right+1] for row in colors[top:bottom+1]]
-        
-        cropped_rows = len(cropped)
-        cropped_cols = len(cropped[0]) if cropped else 0
-        
-        if cropped_rows != rows or cropped_cols != cols:
-            print(f"裁剪白色边界: {rows}x{cols} -> {cropped_rows}x{cropped_cols}")
-        
-        return cropped
+        return crop_white_borders(colors, max_margin=max_margin)
     
     def visualize_result(self, image_path: str, result: Dict, output_path: str = 'result.png'):
         """

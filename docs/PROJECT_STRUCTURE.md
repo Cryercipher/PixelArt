@@ -6,7 +6,10 @@
 PixelArt/
 ├── src/                          # 源代码目录
 │   ├── __init__.py              # 包初始化，导出主类
-│   └── perler_bead_detector.py  # 核心检测器类 (596 行)
+│   ├── config.py                # 统一配置
+│   ├── grid_detection.py        # 网格检测
+│   ├── color_processing.py      # 颜色处理
+│   └── perler_bead_detector.py  # 处理流程编排
 │
 ├── examples/                     # 示例和教程
 │   └── quickstart.py            # 快速开始示例
@@ -34,25 +37,45 @@ PixelArt/
 
 **类**: `PerlerBeadDetector`
 
-**主要方法**:
+**职责**:
+- 统一处理流程编排
+- 对外暴露 API（Web/CLI 依赖）
+- 组合网格检测与颜色处理模块
 
-| 方法 | 功能 | 输入 | 输出 |
-|------|------|------|------|
-| `__init__()` | 初始化检测器参数 | min/max_grid_size | None |
-| `process_image()` | 完整的处理流程 | image_path | 检测结果字典 |
-| `_detect_grid()` | 网格线检测 | 图片数组 | h_lines, v_lines, 间距 |
-| `_extract_colors()` | 颜色提取 | 图片数组, 网格信息 | 颜色矩阵 |
-| `_get_dominant_color()` | 单个格子主颜色 | 格子图片 | RGB 颜色元组 |
-| `_merge_similar_colors()` | 全局颜色聚类 | 颜色矩阵 | 合并后的颜色矩阵 |
-| `save_svg()` | 导出矢量图 | 结果, 路径 | SVG 文件 |
-| `save_color_palette()` | 导出调色板 | 结果, 路径 | 颜色计数 |
-| `visualize_result()` | 生成对比图 | 原图, 结果, 路径 | PNG 文件 |
+### `src/grid_detection.py`
 
-**关键常数**:
+**职责**:
+- 网格线检测（霍夫 + 投影回退）
+- 粗分隔线/水印干扰处理
+- 线条聚类与间距归一化
+
+### `src/color_processing.py`
+
+**职责**:
+- 单格颜色提取
+- K-means 聚类过滤色号文字
+- 全局颜色合并
+
+### `src/config.py`
+
+**职责**:
+- 网格检测与颜色处理的统一配置
+- 提供默认参数与集中化管理
+
+**关键参数（见 `config.py`）**:
 ```python
-MIN_CLUSTER_SIZE = 100          # K-means 最小样本数
-MAX_COLORS = 50                 # 最终最大颜色数
-MARGIN_RATIO = 0.1              # 边界裁剪比例
+GridDetectionConfig(
+  hough_threshold=40,
+  min_line_length=30,
+  max_line_gap=5,
+  kernel_len_ratio=0.05,
+)
+
+ColorProcessingConfig(
+  margin_percent=0.1,
+  kmeans_clusters=5,
+  max_colors=20,
+)
 ```
 
 **处理流程**:
@@ -61,7 +84,7 @@ MARGIN_RATIO = 0.1              # 边界裁剪比例
   ├→ 灰度转换
   ├→ 自适应二值化
   ├→ 形态学操作（膨胀/腐蚀）
-  ├→ Hough 直线检测 (threshold=50, minLineLength=30, maxLineGap=5)
+  ├→ Hough 直线检测 (threshold=40, minLineLength=30, maxLineGap=5)
   └→ 网格线提取和去重
 
 每个格子
@@ -73,7 +96,7 @@ MARGIN_RATIO = 0.1              # 边界裁剪比例
 全局颜色合并
   ├→ 白色背景检测 (brightness>200 AND color_range<20)
   ├→ 白色变体合并
-  └→ K-means 最终聚类 (max=50)
+  └→ K-means 最终聚类 (max=20)
 
 输出
   ├→ SVG 矢量图

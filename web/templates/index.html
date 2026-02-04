@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perler Bead Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- 顶部导航栏 -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <span class="logo">🎨</span>
+                    <h1>Perler Bead</h1>
+                </div>
+                <p class="header-subtitle">Pixel Art Analyzer</p>
+            </div>
+        </header>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 上传区域 -->
+            <section class="upload-section" id="uploadSection">
+                <div class="upload-card">
+                    <div class="upload-area">
+                        <div class="upload-icon">📤</div>
+                        <h2>Upload Your Image</h2>
+                        <p>Drag & drop or click to select your perler bead pattern</p>
+                        <input type="file" id="fileInput" accept="image/*" class="file-input">
+                        <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                            <span>🎯</span> Choose File
+                        </button>
+                        <span class="file-hint">PNG • JPG • GIF (Max 16MB)</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 加载动画 -->
+            <div class="loading-screen" id="loading" style="display: none;">
+                <div class="spinner-container">
+                    <div class="spinner"></div>
+                    <p>Analyzing...</p>
+                </div>
+            </div>
+
+            <!-- 结果区域 -->
+            <section class="result-section" id="resultSection" style="display: none;">
+                <!-- 信息栏 -->
+                <div class="info-bar">
+                    <div class="info-badges">
+                        <span class="info-badge">
+                            <svg width="16" height="16" viewBox="-2 -2 28 28" fill="currentColor" preserveAspectRatio="xMidYMid meet">
+                                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                                <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                            </svg>
+                            <strong id="gridSize">-</strong>
+                        </span>
+                        <span class="info-badge">
+                            <svg width="16" height="16" viewBox="-2 -2 28 28" fill="currentColor" preserveAspectRatio="xMidYMid meet">
+                                <circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/>
+                                <circle cx="8" cy="16" r="3"/><circle cx="16" cy="16" r="3"/>
+                            </svg>
+                            <strong id="colorCount">-</strong>
+                        </span>
+                        <span class="info-badge selected-color" id="selectedColorBadge" style="display:none;">
+                            <span class="color-dot" id="colorDot"></span>
+                            <strong id="selectedColorText">-</strong>
+                        </span>
+                    </div>
+                    <div class="info-actions">
+                        <button class="btn-secondary" onclick="clearSelection()">Clear Selection</button>
+                        <button class="btn-secondary" onclick="resetUpload()">↻ Upload New</button>
+                    </div>
+                </div>
+
+                <!-- 结果容器 -->
+                <div class="result-container">
+                    <!-- 画布区域 -->
+                    <div class="canvas-container">
+                        <div class="canvas-panel">
+                            <div class="canvas-wrapper">
+                                <canvas id="pixelCanvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧色板 -->
+                    <div class="palette-container">
+                        <aside class="color-panel">
+                            <h3 class="panel-title">🎨 Color Palette</h3>
+                            <div class="color-grid" id="colorStatsList"></div>
+                        </aside>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

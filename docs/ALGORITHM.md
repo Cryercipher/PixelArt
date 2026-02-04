@@ -65,7 +65,7 @@ lines = cv2.HoughLinesP(
     image,
     rho=1,
     theta=np.pi/180,
-    threshold=50,          # 投票数阈值
+    threshold=40,          # 投票数阈值
     minLineLength=30,      # 最小线长
     maxLineGap=5           # 最大间隙
 )
@@ -74,7 +74,7 @@ lines = cv2.HoughLinesP(
 **参数解释**：
 - `rho=1` - 距离精度 1 像素
 - `theta=π/180` - 角度精度 1 度
-- `threshold=50` - 至少 50 次投票才认为是线
+- `threshold=40` - 至少 40 次投票才认为是线
 - `minLineLength=30` - 线条至少 30 像素长
 - `maxLineGap=5` - 间隙超过 5 像素则认为是断裂
 
@@ -216,7 +216,7 @@ return color
 
 #### 问题
 
-如果有 50+ 种检测到的颜色，包括很多相似的浅色变种：
+如果有 20+ 种检测到的颜色，包括很多相似的浅色变种：
 - RGB(245, 244, 242)
 - RGB(246, 245, 243)
 - RGB(245, 244, 243)
@@ -243,7 +243,7 @@ if len(white_colors) > 5:
     white_map = {c: avg_white for c in white_colors}
 
 # 3. 对其他颜色进行 K-means 聚类
-kmeans = KMeans(n_clusters=50)
+kmeans = KMeans(n_clusters=20)
 kmeans.fit(other_colors)
 
 # 4. 合并映射
