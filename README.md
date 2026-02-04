@@ -230,11 +230,39 @@ MIT License - 详见 [LICENSE](LICENSE)
 
 ## 🤝 贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎提交 Issue 和 Pull Request！详见 [CONTRIBUTING.md](CONTRIBUTING.md)
+
+### 快速开始开发
+
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/PixelArt.git
+cd PixelArt
+
+# 创建虚拟环境
+uv venv .venv
+source .venv/bin/activate
+
+# 安装开发依赖
+uv pip install -e ".[dev]"
+
+# 运行代码检查
+black src/
+flake8 src/
+mypy src/
+```
 
 ## 📞 支持
 
 如遇问题，请查看：
 1. [TROUBLESHOOT.md](docs/TROUBLESHOOT.md) - 问题排查指南
 2. [ALGORITHM.md](docs/ALGORITHM.md) - 算法详解
-3. 提交 GitHub Issue
+3. [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) - 项目结构
+4. 提交 [GitHub Issue](https://github.com/yourusername/PixelArt/issues)
+
+## 📈 社区
+
+- ⭐ 如果你喜欢这个项目，请给我们一个 Star
+- 🐛 遇到 Bug？请提交 [Issue](https://github.com/yourusername/PixelArt/issues)
+- 💡 有建议？欢迎 [PR](https://github.com/yourusername/PixelArt/pulls)
+- 📢 分享你的使用案例！
