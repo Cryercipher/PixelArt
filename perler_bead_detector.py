@@ -471,10 +471,34 @@ class PerlerBeadDetector:
         rows = result['rows']
         cols = result['cols']
         
-        result_image = np.zeros((rows, cols, 3), dtype=np.uint8)
+        # 创建高分辨率的结果图，每个方格放大以便绘制网格线
+        cell_size = 20  # 每个方格的像素大小
+        result_image = np.zeros((rows * cell_size, cols * cell_size, 3), dtype=np.uint8)
+        
+        # 填充颜色并绘制网格线
         for i in range(rows):
             for j in range(cols):
-                result_image[i, j] = colors[i][j]
+                r, g, b = colors[i][j]
+                # 填充方格
+                y1, y2 = i * cell_size, (i + 1) * cell_size
+                x1, x2 = j * cell_size, (j + 1) * cell_size
+                result_image[y1:y2, x1:x2] = [r, g, b]
+        
+        # 绘制网格线
+        grid_color = [0, 0, 0]  # 黑色网格线
+        line_width = 1
+        
+        # 绘制水平线
+        for i in range(rows + 1):
+            y = i * cell_size
+            if y < result_image.shape[0]:
+                result_image[max(0, y-line_width//2):min(result_image.shape[0], y+line_width//2+1), :] = grid_color
+        
+        # 绘制垂直线
+        for j in range(cols + 1):
+            x = j * cell_size
+            if x < result_image.shape[1]:
+                result_image[:, max(0, x-line_width//2):min(result_image.shape[1], x+line_width//2+1)] = grid_color
         
         # 显示对比
         fig, axes = plt.subplots(1, 2, figsize=(12, 6))
