@@ -48,3 +48,27 @@ venv/
 env/
 ENV/
 .venv
+
+# 输入测试图片
+input.jpg
+input.png
+uploaded_*.jpg
+uploaded_*.png
+
+# Packaging
+*.whl
+*.tar.gz
+build/
+dist/
+*.egg-info/
+
+# 缓存和临时文件
+*.cache
+.pytest_cache/
+htmlcov/
+.coverage
+
+# 编辑器备份
+*.bak
+*.backup
+*~
