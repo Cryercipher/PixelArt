@@ -575,12 +575,15 @@ class PerlerBeadDetector:
         # 显示对比
         fig, axes = plt.subplots(1, 2, figsize=(12, 6))
         
+        # 设置中文字体
+        plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans']
+        
         axes[0].imshow(image_rgb)
-        axes[0].set_title('原始图片')
+        axes[0].set_title('Original')
         axes[0].axis('off')
         
         axes[1].imshow(result_image)
-        axes[1].set_title(f'识别结果 ({rows}x{cols})')
+        axes[1].set_title(f'Result ({rows}x{cols})')
         axes[1].axis('off')
         
         plt.tight_layout()
