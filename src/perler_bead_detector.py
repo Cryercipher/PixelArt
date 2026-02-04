@@ -587,7 +587,7 @@ class PerlerBeadDetector:
         
         # 转换图片为 PIL
         img1_pil = PILImage.fromarray(image_rgb)
-        img2_pil = PILImage.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))
+        img2_pil = PILImage.fromarray(result_image)
         
         # 粘贴图片
         canvas.paste(img1_pil, (padding, padding + label_h))
