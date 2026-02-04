@@ -45,11 +45,23 @@ class PerlerBeadDetector:
         
         print(f"图片尺寸: {image.shape[1]}x{image.shape[0]}")
         
+        # 0. 智能裁剪：移除白色边界和色卡
+        image = self._smart_crop(image)
+        
         # 1. 检测网格
         grid_info = self._detect_grid(image, debug)
         
         if grid_info is None:
             raise ValueError("无法检测到网格结构")
+        
+        # 1.5 根据网格信息进行精确裁剪（移除非网格区域和多余margin）
+        image = self._crop_by_grid(image, grid_info, max_margin=1)
+        
+        # 重新检测网格（可选，确保裁剪后的图片仍能检测到网格）
+        grid_info = self._detect_grid(image, debug)
+        
+        if grid_info is None:
+            raise ValueError("裁剪后无法检测到网格结构")
         
         # 2. 提取每个方格的颜色
         colors = self._extract_colors(image, grid_info)
@@ -117,8 +129,8 @@ class PerlerBeadDetector:
             cv2.destroyAllWindows()
         
         # 使用霍夫变换检测线条
-        h_lines = self._detect_lines(horizontal_lines, angle_threshold=10)
-        v_lines = self._detect_lines(vertical_lines, angle_threshold=80)
+        h_lines = self._detect_lines(horizontal_lines, angle_threshold=10, threshold=40)
+        v_lines = self._detect_lines(vertical_lines, angle_threshold=80, threshold=40)
         
         if len(h_lines) < 2 or len(v_lines) < 2:
             print(f"检测到的线条不足: 水平线 {len(h_lines)}, 垂直线 {len(v_lines)}")
@@ -150,19 +162,22 @@ class PerlerBeadDetector:
         print(f"平均网格间距: 水平 {avg_h_spacing:.1f}, 垂直 {avg_v_spacing:.1f}")
         
         return {
+            'h_positions': h_positions,
+            'v_positions': v_positions,
             'h_lines': h_positions,
             'v_lines': v_positions,
             'h_spacing': avg_h_spacing,
             'v_spacing': avg_v_spacing
         }
     
-    def _detect_lines(self, image: np.ndarray, angle_threshold: float = 10) -> List[Tuple[int, int]]:
+    def _detect_lines(self, image: np.ndarray, angle_threshold: float = 10, threshold: int = 50) -> List[Tuple[int, int]]:
         """
         使用霍夫变换检测线条
         
         Args:
             image: 二值化图像
             angle_threshold: 角度阈值（度），用于过滤非水平/垂直线
+            threshold: 霍夫变换累加器阈值
             
         Returns:
             线条位置列表 [(x或y坐标, 另一坐标)]
@@ -171,7 +186,7 @@ class PerlerBeadDetector:
             image, 
             rho=1, 
             theta=np.pi/180, 
-            threshold=50,          # 降低从100到50，检测更弱的线条
+            threshold=threshold,   # 可配置的阈值
             minLineLength=30,      # 降低从50到30，适应更小的格子
             maxLineGap=5           # 降低从10到5，更严格地连接线条
         )
@@ -491,6 +506,132 @@ class PerlerBeadDetector:
         dwg.save()
         print(f"SVG已保存到: {output_path}")
     
+    def _smart_crop(self, image: np.ndarray, max_margin: int = 3) -> np.ndarray:
+        """
+        智能裁剪图片，移除白色边界和色卡
+        
+        Args:
+            image: 输入图片
+            max_margin: 最多保留的边距行数/列数
+            
+        Returns:
+            裁剪后的图片
+        """
+        h, w = image.shape[:2]
+        
+        # 转换为灰度图
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # 检测白色像素（灰度>160，更激进地检测浅色背景）
+        white_mask = gray > 160
+        
+        # 计算每行/列的白色像素比例
+        white_ratio_rows = white_mask.sum(axis=1) / w
+        white_ratio_cols = white_mask.sum(axis=0) / h
+        
+        # 如果白色像素超过75%，认为是空白行/列（更激进）
+        content_rows = white_ratio_rows < 0.75
+        content_cols = white_ratio_cols < 0.75
+        
+        if not content_rows.any() or not content_cols.any():
+            # 无法检测到内容，返回原图
+            return image
+        
+        # 找到内容的边界
+        row_indices = np.where(content_rows)[0]
+        col_indices = np.where(content_cols)[0]
+        
+        if len(row_indices) == 0 or len(col_indices) == 0:
+            return image
+        
+        top = row_indices[0]
+        bottom = row_indices[-1]
+        left = col_indices[0]
+        right = col_indices[-1]
+        
+        # 从下往上扫描，如果检测到高白色比例行（>90%），则截断底部（裁掉色卡）
+        bottom_cutoff_threshold = 0.90
+        for i in range(h - 1, bottom, -1):
+            if white_ratio_rows[i] > bottom_cutoff_threshold:
+                # 找到第一个连续的高白色区域的起点
+                cutoff_row = i
+                # 继续往上找，确保找到连续白色区域的起点
+                for j in range(i - 1, bottom, -1):
+                    if white_ratio_rows[j] > bottom_cutoff_threshold:
+                        cutoff_row = j
+                    else:
+                        break
+                
+                # 只要找到连续白色区域，就从其起点截断
+                if cutoff_row <= h - 1:
+                    print(f"检测到底部色卡区域，从第{cutoff_row}行截断（裁掉{h - cutoff_row}行）")
+                    bottom = cutoff_row - 1
+                break
+        
+        # 添加最多 max_margin 行/列的边距
+        margin_top = min(max_margin, top)
+        margin_bottom = min(max_margin, h - bottom - 1)
+        margin_left = min(max_margin, left)
+        margin_right = min(max_margin, w - right - 1)
+        
+        top = max(0, top - margin_top)
+        bottom = min(h - 1, bottom + margin_bottom)
+        left = max(0, left - margin_left)
+        right = min(w - 1, right + margin_right)
+        
+        # 裁剪图片
+        cropped = image[top:bottom+1, left:right+1]
+        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
+            print(f"智能裁剪: {w}x{h} -> {cropped.shape[1]}x{cropped.shape[0]}")
+            return cropped
+        
+        return image
+    
+    def _crop_by_grid(self, image: np.ndarray, grid_info: Dict, max_margin: int = 3) -> np.ndarray:
+        """
+        根据网格信息精确裁剪图片，移除非网格区域
+        
+        Args:
+            image: 输入图片
+            grid_info: 网格信息（包含h_positions和v_positions）
+            max_margin: 最多保留的边距行数/列数
+            
+        Returns:
+            裁剪后的图片
+        """
+        h_positions = grid_info['h_positions']
+        v_positions = grid_info['v_positions']
+        
+        if len(h_positions) < 2 or len(v_positions) < 2:
+            return image
+        
+        h, w = image.shape[:2]
+        
+        # 网格的上下左右边界
+        grid_top = h_positions[0]
+        grid_bottom = h_positions[-1]
+        grid_left = v_positions[0]
+        grid_right = v_positions[-1]
+        
+        # 计算最多 max_margin 行/列的边距
+        margin_top = min(max_margin, grid_top)
+        margin_bottom = min(max_margin, h - grid_bottom - 1)
+        margin_left = min(max_margin, grid_left)
+        margin_right = min(max_margin, w - grid_right - 1)
+        
+        # 裁剪范围
+        top = max(0, grid_top - margin_top)
+        bottom = min(h - 1, grid_bottom + margin_bottom)
+        left = max(0, grid_left - margin_left)
+        right = min(w - 1, grid_right + margin_right)
+        
+        cropped = image[top:bottom+1, left:right+1]
+        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
+            print(f"网格裁剪: {w}x{h} -> {cropped.shape[1]}x{cropped.shape[0]}")
+            return cropped
+        
+        return image
+    
     def save_color_palette(self, result: Dict, output_path: str = 'color_palette.txt'):
         """
         保存颜色调色板（统计所有不同的颜色）
@@ -523,6 +664,106 @@ class PerlerBeadDetector:
         
         return color_counts
     
+    def _crop_white_borders(self, colors: List[List[Tuple[int, int, int]]], 
+                           max_margin: int = 2) -> List[List[Tuple[int, int, int]]]:
+        """
+        裁剪颜色矩阵中全白色或高白色比例的边界行/列
+        
+        Args:
+            colors: 颜色矩阵
+            max_margin: 最多保留的边距行/列数
+            
+        Returns:
+            裁剪后的颜色矩阵
+        """
+        if not colors or not colors[0]:
+            return colors
+        
+        rows = len(colors)
+        cols = len(colors[0])
+        
+        def is_white(color: Tuple[int, int, int]) -> bool:
+            """判断颜色是否为白色"""
+            r, g, b = color
+            avg = (r + g + b) / 3
+            color_range = max(r, g, b) - min(r, g, b)
+            return avg > 200 and color_range < 20
+        
+        # 计算每行的白色比例
+        row_white_ratios = []
+        for i in range(rows):
+            white_count = sum(1 for j in range(cols) if is_white(colors[i][j]))
+            row_white_ratios.append(white_count / cols)
+        
+        # 计算每列的白色比例
+        col_white_ratios = []
+        for j in range(cols):
+            white_count = sum(1 for i in range(rows) if is_white(colors[i][j]))
+            col_white_ratios.append(white_count / rows)
+        
+        # 找到内容区域（白色比例<90%的行/列）
+        threshold = 0.90
+        content_rows = [i for i in range(rows) if row_white_ratios[i] < threshold]
+        content_cols = [j for j in range(cols) if col_white_ratios[j] < threshold]
+        
+        if not content_rows or not content_cols:
+            return colors
+        
+        top = content_rows[0]
+        bottom = content_rows[-1]
+        left = content_cols[0]
+        right = content_cols[-1]
+        
+        # 从底部向上扫描，检测色卡区域和白色空白区域
+        def count_unique_colors(row: List[Tuple[int, int, int]]) -> int:
+            """计算一行中不同颜色的数量"""
+            return len(set(row))
+        
+        # 从下往上找，寻找连续的高白色区域（>70%）或纯色行（<=3种颜色）
+        # 这些是色卡或空白区域的特征
+        cutoff_row = rows
+        consecutive_empty_rows = 0
+        found_empty_region = False
+        
+        for i in range(rows - 1, top - 1, -1):
+            unique_colors = count_unique_colors(colors[i])
+            white_ratio = row_white_ratios[i]
+            
+            # 判断是否是空白/色卡行：高白色比例(>70%) 或 颜色种类很少(<=3)
+            is_empty_or_card = white_ratio > 0.70 or unique_colors <= 3
+            
+            if is_empty_or_card:
+                consecutive_empty_rows += 1
+                cutoff_row = i
+                if consecutive_empty_rows >= 8:  # 连续8行以上确认是空白区域
+                    found_empty_region = True
+            else:
+                # 遇到正常内容行
+                if found_empty_region:
+                    # 已经找到过连续空白区域，说明cutoff_row往下都是空白+色卡
+                    rows_to_crop = rows - cutoff_row
+                    if rows_to_crop > 0:
+                        print(f"检测到底部色卡/空白区域，从第{cutoff_row}行裁剪（裁掉{rows_to_crop}行）")
+                        bottom = cutoff_row - 1
+                    break
+        
+        # 添加边距
+        top = max(0, top - max_margin)
+        bottom = min(rows - 1, bottom + max_margin)
+        left = max(0, left - max_margin)
+        right = min(cols - 1, right + max_margin)
+        
+        # 裁剪矩阵
+        cropped = [row[left:right+1] for row in colors[top:bottom+1]]
+        
+        cropped_rows = len(cropped)
+        cropped_cols = len(cropped[0]) if cropped else 0
+        
+        if cropped_rows != rows or cropped_cols != cols:
+            print(f"裁剪白色边界: {rows}x{cols} -> {cropped_rows}x{cropped_cols}")
+        
+        return cropped
+    
     def visualize_result(self, image_path: str, result: Dict, output_path: str = 'result.png'):
         """
         可视化检测结果
@@ -540,6 +781,11 @@ class PerlerBeadDetector:
         colors = result['colors']
         rows = result['rows']
         cols = result['cols']
+        
+        # 智能裁剪colors矩阵，移除全白色的边界行/列
+        colors = self._crop_white_borders(colors)
+        rows = len(colors)
+        cols = len(colors[0]) if rows > 0 else 0
         
         # 创建高分辨率的结果图，每个方格放大以便绘制网格线
         cell_size = 20  # 每个方格的像素大小
