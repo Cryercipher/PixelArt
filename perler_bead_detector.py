@@ -171,9 +171,9 @@ class PerlerBeadDetector:
             image, 
             rho=1, 
             theta=np.pi/180, 
-            threshold=100,
-            minLineLength=50, 
-            maxLineGap=10
+            threshold=50,          # 降低从100到50，检测更弱的线条
+            minLineLength=30,      # 降低从50到30，适应更小的格子
+            maxLineGap=5           # 降低从10到5，更严格地连接线条
         )
         
         if lines is None:
@@ -276,10 +276,11 @@ class PerlerBeadDetector:
         """
         获取方格的主导颜色
         
-        使用多种方法确保颜色准确：
+        使用多种方法确保颜色准确并抗色号文字干扰：
         1. 中值滤波去噪
-        2. K-means聚类
-        3. 选择最大簇的中心颜色
+        2. K-means聚类分离背景色和色号文字
+        3. 选择最大簇的中心颜色（忽略色号文字）
+        4. 过滤极端颜色（黑白色号）
         
         Args:
             cell: 方格图像
@@ -299,17 +300,46 @@ class PerlerBeadDetector:
         if len(pixels) < 10:
             return tuple(map(int, pixels.mean(axis=0)))
         
-        # 4. 使用K-means聚类（处理颜色差异）
+        # 4. 使用K-means聚类（处理颜色差异和色号干扰）
         try:
-            kmeans = KMeans(n_clusters=min(n_colors + 2, len(pixels)), random_state=42, n_init=10)
+            # 使用更多聚类数以更好地分离色号文字
+            n_clusters = min(5, len(pixels))  # 增加到5类，更好地区分背景和文字
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
             kmeans.fit(pixels)
             
-            # 5. 找到最大的簇
+            # 5. 找到最大的簇，但排除极端颜色（可能是色号文字）
             labels = kmeans.labels_
             label_counts = Counter(labels)
-            dominant_label = label_counts.most_common(1)[0][0]
             
-            # 6. 返回主导颜色
+            # 按簇大小排序
+            sorted_clusters = label_counts.most_common()
+            
+            # 尝试选择最大的非极端颜色簇
+            for cluster_label, count in sorted_clusters:
+                cluster_color = kmeans.cluster_centers_[cluster_label]
+                r, g, b = cluster_color
+                
+                # 过滤极端黑色（色号常用黑色）
+                if r < 50 and g < 50 and b < 50:
+                    continue
+                
+                # 判断是否是白色/灰色：亮度高 + 色差小（无色性）
+                avg_brightness = (r + g + b) / 3
+                color_range = max(r, g, b) - min(r, g, b)
+                
+                # 白色条件：色差<20 且亮度>200
+                # 这样可以区分白色 vs 浅黄色
+                if avg_brightness > 200 and color_range < 20:
+                    # 如果是浅色簇且占比合理，认为是白色背景
+                    if count / len(pixels) > 0.3:
+                        return tuple(map(int, cluster_color))
+                    continue
+                
+                # 找到合适的背景色
+                return tuple(map(int, cluster_color))
+            
+            # 如果所有簇都被过滤了，返回最大簇
+            dominant_label = sorted_clusters[0][0]
             dominant_color = kmeans.cluster_centers_[dominant_label]
             return tuple(map(int, dominant_color))
         
@@ -339,11 +369,48 @@ class PerlerBeadDetector:
         
         unique_colors = list(set(all_colors))
         
+        # 分离白色背景和其他颜色
+        white_colors = []
+        other_colors = []
+        
+        for color in unique_colors:
+            r, g, b = color
+            # 判断是否是白色：亮度高 + 色差小
+            avg_brightness = (r + g + b) / 3
+            color_range = max(r, g, b) - min(r, g, b)
+            
+            # 白色/灰色条件：色差<20 且亮度>200
+            if avg_brightness > 200 and color_range < 20:
+                white_colors.append(color)
+            else:
+                other_colors.append(color)
+        
+        print(f"检测到 {len(unique_colors)} 种颜色 (其中 {len(white_colors)} 种白色背景变种，{len(other_colors)} 种其他颜色)")
+        
+        # 如果白色变种太多，先合并它们
+        if len(white_colors) > 5:
+            print(f"合并 {len(white_colors)} 种白色背景变种...")
+            # 所有白色映射到第一个白色（或取平均值）
+            if white_colors:
+                avg_white = tuple(map(int, np.mean(white_colors, axis=0)))
+                white_color_map = {c: avg_white for c in white_colors}
+            else:
+                white_color_map = {}
+        else:
+            white_color_map = {}
+        
         if len(unique_colors) <= max_colors:
             print(f"颜色数量 ({len(unique_colors)}) 在合理范围内，跳过聚类")
+            # 应用白色合并
+            if white_color_map:
+                merged_colors = []
+                for row in colors:
+                    merged_row = [white_color_map.get(c, c) for c in row]
+                    merged_colors.append(merged_row)
+                return merged_colors
             return colors
         
-        print(f"检测到 {len(unique_colors)} 种颜色，进行全局聚类...")
+        print(f"进行全局聚类...")
         
         # 将颜色转换为数组
         color_array = np.array(unique_colors)
@@ -361,7 +428,12 @@ class PerlerBeadDetector:
             for i, original_color in enumerate(unique_colors):
                 cluster_id = kmeans.labels_[i]
                 new_color = tuple(map(int, kmeans.cluster_centers_[cluster_id]))
-                color_map[original_color] = new_color
+                
+                # 如果这是白色，优先使用白色合并的结果
+                if original_color in white_color_map:
+                    color_map[original_color] = white_color_map[original_color]
+                else:
+                    color_map[original_color] = new_color
             
             # 应用颜色映射
             merged_colors = []
