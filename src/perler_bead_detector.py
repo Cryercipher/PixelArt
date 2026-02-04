@@ -665,7 +665,7 @@ class PerlerBeadDetector:
         return color_counts
     
     def _crop_white_borders(self, colors: List[List[Tuple[int, int, int]]], 
-                           max_margin: int = 2) -> List[List[Tuple[int, int, int]]]:
+                           max_margin: int = 5) -> List[List[Tuple[int, int, int]]]:
         """
         裁剪颜色矩阵中全白色或高白色比例的边界行/列
         
@@ -825,9 +825,14 @@ class PerlerBeadDetector:
         padding = 40
         label_h = 30
         
+        # 计算居中位置
+        max_h = max(h1, h2)
+        y1_offset = (max_h - h1) // 2  # 原图垂直居中偏移
+        y2_offset = (max_h - h2) // 2  # 生成图垂直居中偏移
+        
         # 创建合成图
         canvas_w = w1 + w2 + 3 * padding
-        canvas_h = max(h1, h2) + label_h + 2 * padding
+        canvas_h = max_h + label_h + 2 * padding
         
         canvas = PILImage.new('RGB', (canvas_w, canvas_h), (255, 255, 255))
         
@@ -835,9 +840,14 @@ class PerlerBeadDetector:
         img1_pil = PILImage.fromarray(image_rgb)
         img2_pil = PILImage.fromarray(result_image)
         
-        # 粘贴图片
-        canvas.paste(img1_pil, (padding, padding + label_h))
-        canvas.paste(img2_pil, (w1 + 2 * padding, padding + label_h))
+        # 保存纯净版本的生成图片
+        clean_output = output_path.replace('.png', '_clean.png')
+        img2_pil.save(clean_output, quality=95)
+        print(f"纯净版结果已保存到: {clean_output}")
+        
+        # 粘贴图片（居中对齐）
+        canvas.paste(img1_pil, (padding, padding + label_h + y1_offset))
+        canvas.paste(img2_pil, (w1 + 2 * padding, padding + label_h + y2_offset))
         
         # 绘制文字
         draw = ImageDraw.Draw(canvas)
