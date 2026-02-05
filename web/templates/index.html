@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Perler Bead Analyzer</title>
+    <title>i 🩷 perler bead</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -14,7 +14,7 @@
             <div class="header-content">
                 <div class="header-left">
                     <span class="logo">🎨</span>
-                    <h1>i🩷perler bead</h1>
+                    <h1>i 🩷 perler bead</h1>
                 </div>
                 <p class="header-subtitle">Pixel Art Analyzer</p>
             </div>
@@ -85,16 +85,24 @@
 
                 <input type="file" id="svgInput" accept="image/svg+xml" style="display:none;">
 
-                <!-- 原图预览区域 -->
-                <div class="original-preview" id="originalPreview" style="display:none;">
-                    <div class="preview-header">
-                        <span class="preview-title">🖼️ Original Reference</span>
-                        <button class="btn-preview-toggle" id="togglePreview" type="button">−</button>
+                <!-- 原图浮窗 -->
+                <div class="original-modal" id="originalModal" style="display:none;">
+                    <div class="modal-header">
+                        <span class="modal-title">🖼️ Original Image</span>
+                        <div class="modal-controls">
+                            <button class="btn-modal-control" id="toggleModalSize" type="button" title="Toggle size">⇕</button>
+                            <button class="btn-modal-control" id="closeModal" type="button" title="Close">×</button>
+                        </div>
                     </div>
-                    <div class="preview-content" id="previewContent">
-                        <img id="originalImg" alt="Original" />
+                    <div class="modal-content" id="modalContent">
+                        <img id="originalImgModal" alt="Original" draggable="false" />
                     </div>
                 </div>
+
+                <!-- 显示原图按钮 -->
+                <button class="btn-show-original" id="showOriginalBtn" style="display:none;" type="button">
+                    🖼️ Show Original
+                </button>
 
                 <!-- 结果容器 -->
                 <div class="result-container">

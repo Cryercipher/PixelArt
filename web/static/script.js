@@ -33,8 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // SVG 导入导出按钮
     bindSvgButtons();
     
-    // 原图预览折叠按钮
-    bindPreviewToggle();
+    // 原图浮窗控制
+    bindModalControls();
     
     // 画布点击事件
     canvas.addEventListener('click', handleCanvasClick);
@@ -396,17 +396,71 @@ function resetCropSelection() {
     }
 }
 
-// ============ 原图预览折叠 ============
-function bindPreviewToggle() {
-    const toggleBtn = document.getElementById('togglePreview');
-    if (toggleBtn) {
-        toggleBtn.onclick = () => {
-            const content = document.getElementById('previewContent');
-            if (content) {
-                content.classList.toggle('collapsed');
-                toggleBtn.textContent = content.classList.contains('collapsed') ? '+' : '−';
+// ============ 原图浮窗控制 ============
+function bindModalControls() {
+    const showBtn = document.getElementById('showOriginalBtn');
+    const modal = document.getElementById('originalModal');
+    const closeBtn = document.getElementById('closeModal');
+    const toggleSizeBtn = document.getElementById('toggleModalSize');
+    const modalHeader = document.querySelector('.modal-header');
+    const modalImg = document.getElementById('originalImgModal');
+    
+    if (showBtn) {
+        showBtn.onclick = () => {
+            if (modal && originalImageUrl) {
+                if (modalImg) modalImg.src = originalImageUrl;
+                modal.style.display = 'flex';
+                modal.classList.add('small');
             }
         };
+    }
+    
+    if (closeBtn && modal) {
+        closeBtn.onclick = () => {
+            modal.style.display = 'none';
+        };
+    }
+    
+    if (toggleSizeBtn && modal) {
+        toggleSizeBtn.onclick = () => {
+            if (modal.classList.contains('small')) {
+                modal.classList.remove('small');
+                modal.classList.add('large');
+            } else {
+                modal.classList.remove('large');
+                modal.classList.add('small');
+            }
+        };
+    }
+    
+    // 拖动功能
+    if (modalHeader && modal) {
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        
+        modalHeader.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            isDragging = true;
+            initialX = e.clientX - modal.offsetLeft;
+            initialY = e.clientY - modal.offsetTop;
+            modal.style.transform = 'none';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+            modal.style.left = currentX + 'px';
+            modal.style.top = currentY + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
     }
 }
 
@@ -724,6 +778,9 @@ function resetUpload() {
     const svgInput = document.getElementById('svgInput');
     if (svgInput) svgInput.value = '';
     
-    const originalPreview = document.getElementById('originalPreview');
-    if (originalPreview) originalPreview.style.display = 'none';
+    const modal = document.getElementById('originalModal');
+    if (modal) modal.style.display = 'none';
+    
+    const showBtn = document.getElementById('showOriginalBtn');
+    if (showBtn) showBtn.style.display = 'none';
 }
