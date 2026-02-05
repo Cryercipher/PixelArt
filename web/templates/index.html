@@ -85,6 +85,17 @@
 
                 <input type="file" id="svgInput" accept="image/svg+xml" style="display:none;">
 
+                <!-- 原图预览区域 -->
+                <div class="original-preview" id="originalPreview" style="display:none;">
+                    <div class="preview-header">
+                        <span class="preview-title">🖼️ Original Reference</span>
+                        <button class="btn-preview-toggle" id="togglePreview" type="button">−</button>
+                    </div>
+                    <div class="preview-content" id="previewContent">
+                        <img id="originalImg" alt="Original" />
+                    </div>
+                </div>
+
                 <!-- 结果容器 -->
                 <div class="result-container">
                     <!-- 画布区域 -->
@@ -108,6 +119,6 @@
         </main>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}?v=20260205d"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=20260205e"></script>
 </body>
 </html>

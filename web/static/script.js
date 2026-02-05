@@ -3,12 +3,13 @@ let currentData = null;
 let selectedColor = null;
 let canvas = null;
 let ctx = null;
-const CELL_SIZE = 20;
+const CELL_SIZE = 12;
 let editMode = false;
 let cropMode = false;
 let isCropping = false;
 let cropStart = null;
 let cropEnd = null;
+let originalImageUrl = null;
 
 // ============ 初始化 ============
 document.addEventListener('DOMContentLoaded', () => {
@@ -32,6 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // SVG 导入导出按钮
     bindSvgButtons();
     
+    // 原图预览折叠按钮
+    bindPreviewToggle();
+    
     // 画布点击事件
     canvas.addEventListener('click', handleCanvasClick);
     // 裁剪拖拽事件
@@ -45,6 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
 async function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
+    
+    // 保存原图 URL
+    originalImageUrl = URL.createObjectURL(file);
     
     // 显示加载动画
     document.getElementById('uploadSection').style.display = 'none';
@@ -360,6 +367,20 @@ function resetCropSelection() {
     }
 }
 
+// ============ 原图预览折叠 ============
+function bindPreviewToggle() {
+    const toggleBtn = document.getElementById('togglePreview');
+    if (toggleBtn) {
+        toggleBtn.onclick = () => {
+            const content = document.getElementById('previewContent');
+            if (content) {
+                content.classList.toggle('collapsed');
+                toggleBtn.textContent = content.classList.contains('collapsed') ? '+' : '−';
+            }
+        };
+    }
+}
+
 function handleCropMouseDown(event) {
     if (!cropMode || !currentData) return;
     const { row, col } = getCellFromEvent(event);
@@ -662,10 +683,18 @@ function resetUpload() {
     cropMode = false;
     updateCropModeUI();
     
+    if (originalImageUrl) {
+        URL.revokeObjectURL(originalImageUrl);
+        originalImageUrl = null;
+    }
+    
     document.getElementById('uploadSection').style.display = 'flex';
     document.getElementById('loading').style.display = 'none';
     document.getElementById('resultSection').style.display = 'none';
     document.getElementById('fileInput').value = '';
     const svgInput = document.getElementById('svgInput');
     if (svgInput) svgInput.value = '';
+    
+    const originalPreview = document.getElementById('originalPreview');
+    if (originalPreview) originalPreview.style.display = 'none';
 }
