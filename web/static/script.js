@@ -5,6 +5,10 @@ let canvas = null;
 let ctx = null;
 const CELL_SIZE = 20;
 let editMode = false;
+let cropMode = false;
+let isCropping = false;
+let cropStart = null;
+let cropEnd = null;
 
 // ============ 初始化 ============
 document.addEventListener('DOMContentLoaded', () => {
@@ -20,9 +24,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // 编辑模式按钮
     bindEditModeButton();
     updateEditModeUI();
+
+    // 裁剪模式按钮
+    bindCropModeButton();
+    updateCropModeUI();
+
+    // SVG 导入导出按钮
+    bindSvgButtons();
     
     // 画布点击事件
     canvas.addEventListener('click', handleCanvasClick);
+    // 裁剪拖拽事件
+    canvas.addEventListener('mousedown', handleCropMouseDown);
+    canvas.addEventListener('mousemove', handleCropMouseMove);
+    canvas.addEventListener('mouseup', handleCropMouseUp);
+    canvas.addEventListener('mouseleave', handleCropMouseLeave);
 });
 
 // ============ 文件选择处理 ============
@@ -75,9 +91,13 @@ function displayResult(data) {
     clearSelection();
     editMode = false;
     updateEditModeUI();
+    cropMode = false;
+    updateCropModeUI();
     
-    // 重新绑定编辑按钮（防止动态渲染导致事件丢失）
+    // 重新绑定编辑/裁剪/SVG按钮（防止动态渲染导致事件丢失）
     bindEditModeButton();
+    bindCropModeButton();
+    bindSvgButtons();
 
     // 绘制画布
     drawCanvas(data);
@@ -159,6 +179,7 @@ function drawGrid(rows, cols) {
 // ============ 画布点击处理 ============
 function handleCanvasClick(event) {
     if (!currentData) return;
+    if (cropMode) return;
     
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
@@ -180,6 +201,10 @@ function handleCanvasClick(event) {
 // ============ 编辑模式切换 ============
 function toggleEditMode() {
     editMode = !editMode;
+    if (editMode) {
+        cropMode = false;
+        updateCropModeUI();
+    }
     updateEditModeUI();
 }
 
@@ -195,6 +220,252 @@ function bindEditModeButton() {
         }
         toggleEditMode();
     };
+}
+
+// ============ 裁剪模式切换 ============
+function toggleCropMode() {
+    cropMode = !cropMode;
+    if (cropMode) {
+        editMode = false;
+        updateEditModeUI();
+    }
+    resetCropSelection();
+    updateCropModeUI();
+}
+
+window.toggleCropMode = toggleCropMode;
+
+function bindCropModeButton() {
+    const cropBtn = document.getElementById('cropModeBtn');
+    if (!cropBtn) return;
+    cropBtn.onclick = (event) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        toggleCropMode();
+    };
+}
+
+// ============ SVG 导入导出 ==========
+function bindSvgButtons() {
+    const saveBtn = document.getElementById('saveSvgBtn');
+    const importBtn = document.getElementById('importSvgBtn');
+    const svgInput = document.getElementById('svgInput');
+
+    if (saveBtn) {
+        saveBtn.onclick = (event) => {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            handleSaveSvg();
+        };
+    }
+
+    if (importBtn && svgInput) {
+        importBtn.onclick = (event) => {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            svgInput.click();
+        };
+    }
+
+    if (svgInput) {
+        svgInput.onchange = handleImportSvgChange;
+    }
+}
+
+async function handleSaveSvg() {
+    if (!currentData) return;
+
+    try {
+        const response = await fetch('/export_svg', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                rows: currentData.rows,
+                cols: currentData.cols,
+                colors: currentData.colors,
+                cellSize: CELL_SIZE
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('导出失败');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `pixelart_${currentData.rows}x${currentData.cols}.svg`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        alert('❌ 导出失败: ' + error.message);
+    }
+}
+
+async function handleImportSvgChange(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/import_svg', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            currentData = data;
+            displayResult(data);
+        } else {
+            alert('❌ 导入失败: ' + (data.error || '未知错误'));
+        }
+    } catch (error) {
+        alert('❌ 导入失败: ' + error.message);
+    } finally {
+        event.target.value = '';
+    }
+}
+
+function updateCropModeUI() {
+    const cropBtn = document.getElementById('cropModeBtn');
+    const hint = document.getElementById('cropHint');
+    if (cropBtn) {
+        cropBtn.textContent = cropMode ? 'Crop Mode: ON' : 'Crop Mode: OFF';
+        cropBtn.classList.toggle('active', cropMode);
+    }
+    if (hint) {
+        hint.style.display = cropMode ? 'block' : 'none';
+    }
+}
+
+function resetCropSelection() {
+    isCropping = false;
+    cropStart = null;
+    cropEnd = null;
+    if (currentData) {
+        redrawWithHighlight();
+    }
+}
+
+function handleCropMouseDown(event) {
+    if (!cropMode || !currentData) return;
+    const { row, col } = getCellFromEvent(event);
+    if (row === null || col === null) return;
+    isCropping = true;
+    cropStart = { row, col };
+    cropEnd = { row, col };
+    redrawWithCropOverlay();
+}
+
+function handleCropMouseMove(event) {
+    if (!cropMode || !isCropping || !currentData) return;
+    const { row, col } = getCellFromEvent(event);
+    if (row === null || col === null) return;
+    cropEnd = { row, col };
+    redrawWithCropOverlay();
+}
+
+function handleCropMouseUp() {
+    if (!cropMode || !isCropping || !currentData) return;
+    isCropping = false;
+    applyCropSelection();
+}
+
+function handleCropMouseLeave() {
+    if (!cropMode || !isCropping) return;
+    isCropping = false;
+    redrawWithCropOverlay();
+}
+
+function getCellFromEvent(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const col = Math.floor(x / CELL_SIZE);
+    const row = Math.floor(y / CELL_SIZE);
+    if (!currentData || row < 0 || col < 0 || row >= currentData.rows || col >= currentData.cols) {
+        return { row: null, col: null };
+    }
+    return { row, col };
+}
+
+function redrawWithCropOverlay() {
+    redrawWithHighlight();
+    if (!cropStart || !cropEnd) return;
+    const minRow = Math.min(cropStart.row, cropEnd.row);
+    const maxRow = Math.max(cropStart.row, cropEnd.row);
+    const minCol = Math.min(cropStart.col, cropEnd.col);
+    const maxCol = Math.max(cropStart.col, cropEnd.col);
+
+    const x = minCol * CELL_SIZE;
+    const y = minRow * CELL_SIZE;
+    const w = (maxCol - minCol + 1) * CELL_SIZE;
+    const h = (maxRow - minRow + 1) * CELL_SIZE;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+    ctx.strokeStyle = 'rgba(255, 165, 0, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.restore();
+}
+
+function applyCropSelection() {
+    if (!cropStart || !cropEnd) return;
+    const minRow = Math.min(cropStart.row, cropEnd.row);
+    const maxRow = Math.max(cropStart.row, cropEnd.row);
+    const minCol = Math.min(cropStart.col, cropEnd.col);
+    const maxCol = Math.max(cropStart.col, cropEnd.col);
+
+    const newColors = [];
+    for (let r = minRow; r <= maxRow; r++) {
+        const newRow = currentData.colors[r].slice(minCol, maxCol + 1);
+        newColors.push(newRow);
+    }
+
+    currentData.colors = newColors;
+    currentData.rows = newColors.length;
+    currentData.cols = newColors[0]?.length || 0;
+
+    rebuildColorStatsFromGrid();
+    resetCropSelection();
+    drawCanvas(currentData);
+    displayColorStats(currentData);
+    document.getElementById('gridSize').textContent = `${currentData.rows} × ${currentData.cols}`;
+    document.getElementById('colorCount').textContent = `${currentData.totalColors}`;
+}
+
+function rebuildColorStatsFromGrid() {
+    const stats = {};
+    for (let r = 0; r < currentData.rows; r++) {
+        for (let c = 0; c < currentData.cols; c++) {
+            const color = currentData.colors[r][c];
+            if (stats[color]) {
+                stats[color].count += 1;
+            } else {
+                stats[color] = {
+                    rgb: hexToRgbString(color),
+                    count: 1
+                };
+            }
+        }
+    }
+    currentData.colorStats = stats;
+    currentData.totalColors = Object.keys(stats).length;
 }
 
 function updateEditModeUI() {
@@ -388,9 +659,13 @@ function resetUpload() {
     selectedColor = null;
     editMode = false;
     updateEditModeUI();
+    cropMode = false;
+    updateCropModeUI();
     
     document.getElementById('uploadSection').style.display = 'flex';
     document.getElementById('loading').style.display = 'none';
     document.getElementById('resultSection').style.display = 'none';
     document.getElementById('fileInput').value = '';
+    const svgInput = document.getElementById('svgInput');
+    if (svgInput) svgInput.value = '';
 }

@@ -11,6 +11,8 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 import json
+import svgwrite
+import xml.etree.ElementTree as ET
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
@@ -43,6 +45,27 @@ def allowed_file(filename):
 def rgb_to_hex(r, g, b):
     """RGB转16进制颜色"""
     return f'#{r:02x}{g:02x}{b:02x}'
+
+
+def hex_to_rgb(hex_color: str):
+    """16进制颜色转RGB"""
+    value = hex_color.lstrip('#')
+    return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+
+
+def build_color_stats_from_hex_grid(color_grid):
+    stats = {}
+    for row in color_grid:
+        for hex_color in row:
+            if hex_color in stats:
+                stats[hex_color]['count'] += 1
+            else:
+                r, g, b = hex_to_rgb(hex_color)
+                stats[hex_color] = {
+                    'rgb': f'RGB({r},{g},{b})',
+                    'count': 1
+                }
+    return stats
 
 
 @app.route('/')
@@ -82,8 +105,6 @@ def upload_file():
             
             # 转换颜色数据为前端格式
             color_grid = []
-            color_stats = {}
-            
             for i in range(rows):
                 row = []
                 for j in range(cols):
@@ -91,17 +112,9 @@ def upload_file():
                     r, g, b = colors[i][j]
                     hex_color = rgb_to_hex(r, g, b)
                     row.append(hex_color)
-                    
-                    # 统计颜色
-                    if hex_color in color_stats:
-                        color_stats[hex_color]['count'] += 1
-                    else:
-                        color_stats[hex_color] = {
-                            'rgb': f'RGB({r},{g},{b})',
-                            'count': 1
-                        }
-                
                 color_grid.append(row)
+
+            color_stats = build_color_stats_from_hex_grid(color_grid)
             
             # 按使用次数排序颜色统计
             sorted_colors = sorted(
@@ -128,6 +141,107 @@ def upload_file():
                 os.remove(filepath)
     
     return jsonify({'error': '不支持的文件格式'}), 400
+
+
+@app.route('/export_svg', methods=['POST'])
+def export_svg():
+    """导出当前颜色网格为SVG"""
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'error': '无效请求'}), 400
+
+        colors = data.get('colors')
+        rows = data.get('rows')
+        cols = data.get('cols')
+
+        if not colors or not rows or not cols:
+            return jsonify({'error': '缺少颜色网格数据'}), 400
+
+        cell_size = int(data.get('cellSize', 20))
+        width = cols * cell_size
+        height = rows * cell_size
+
+        dwg = svgwrite.Drawing(size=(width, height))
+
+        # metadata 中保存原始网格
+        meta_payload = {
+            'rows': rows,
+            'cols': cols,
+            'colors': colors,
+            'cellSize': cell_size,
+        }
+        dwg.add(dwg.metadata(json.dumps(meta_payload, ensure_ascii=False)))
+
+        for i in range(rows):
+            for j in range(cols):
+                color = colors[i][j]
+                dwg.add(
+                    dwg.rect(
+                        insert=(j * cell_size, i * cell_size),
+                        size=(cell_size, cell_size),
+                        fill=color,
+                        stroke='black',
+                        stroke_width=1.0,
+                    )
+                )
+
+        svg_text = dwg.tostring()
+        return app.response_class(svg_text, mimetype='image/svg+xml')
+    except Exception as e:
+        print(f'SVG导出错误: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'导出失败: {str(e)}'}), 500
+
+
+@app.route('/import_svg', methods=['POST'])
+def import_svg():
+    """导入带有metadata的SVG"""
+    if 'file' not in request.files:
+        return jsonify({'error': '没有文件上传'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': '没有选择文件'}), 400
+
+    content = file.read()
+    try:
+        root = ET.fromstring(content)
+    except Exception:
+        return jsonify({'error': 'SVG 解析失败'}), 400
+
+    metadata_node = root.find('.//{*}metadata')
+    if metadata_node is None or not (metadata_node.text and metadata_node.text.strip()):
+        return jsonify({'error': 'SVG 缺少可导入的 metadata'}), 400
+
+    try:
+        meta = json.loads(metadata_node.text.strip())
+        colors = meta.get('colors')
+        rows = meta.get('rows')
+        cols = meta.get('cols')
+    except Exception:
+        return jsonify({'error': 'metadata 格式不正确'}), 400
+
+    if not colors or not rows or not cols:
+        return jsonify({'error': 'metadata 数据不完整'}), 400
+
+    color_stats = build_color_stats_from_hex_grid(colors)
+
+    sorted_colors = sorted(
+        color_stats.items(),
+        key=lambda x: x[1]['count'],
+        reverse=True
+    )
+
+    return jsonify({
+        'success': True,
+        'rows': rows,
+        'cols': cols,
+        'colors': colors,
+        'colorStats': dict(sorted_colors),
+        'totalColors': len(color_stats)
+    })
 
 
 @app.route('/static/<path:path>')
