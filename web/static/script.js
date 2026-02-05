@@ -3,7 +3,7 @@ let currentData = null;
 let selectedColor = null;
 let canvas = null;
 let ctx = null;
-const CELL_SIZE = 12;
+let CELL_SIZE = 12;
 let editMode = false;
 let cropMode = false;
 let isCropping = false;
@@ -44,6 +44,21 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.addEventListener('mouseup', handleCropMouseUp);
     canvas.addEventListener('mouseleave', handleCropMouseLeave);
 });
+
+// ============ 动态计算格子大小 ============
+function calculateOptimalCellSize(rows, cols) {
+    const canvasContainer = document.querySelector('.canvas-wrapper');
+    if (!canvasContainer) return 12;
+    
+    const maxWidth = canvasContainer.clientWidth - 40;
+    const maxHeight = window.innerHeight * 0.6;
+    
+    const cellSizeByWidth = Math.floor(maxWidth / cols);
+    const cellSizeByHeight = Math.floor(maxHeight / rows);
+    
+    const optimalSize = Math.min(cellSizeByWidth, cellSizeByHeight);
+    return Math.max(8, Math.min(optimalSize, 20));
+}
 
 // ============ 文件选择处理 ============
 async function handleFileSelect(event) {
@@ -105,6 +120,17 @@ function displayResult(data) {
     bindEditModeButton();
     bindCropModeButton();
     bindSvgButtons();
+    bindPreviewToggle();
+    
+    // 显示原图预览
+    if (originalImageUrl) {
+        const originalPreview = document.getElementById('originalPreview');
+        const originalImg = document.getElementById('originalImg');
+        if (originalPreview && originalImg) {
+            originalImg.src = originalImageUrl;
+            originalPreview.style.display = 'block';
+        }
+    }
 
     // 绘制画布
     drawCanvas(data);
@@ -121,6 +147,9 @@ function displayResult(data) {
 // ============ 绘制画布 ============
 function drawCanvas(data) {
     const { rows, cols, colors } = data;
+    
+    // 动态计算格子大小
+    CELL_SIZE = calculateOptimalCellSize(rows, cols);
     
     // 设置画布大小
     canvas.width = cols * CELL_SIZE;
