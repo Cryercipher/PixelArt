@@ -120,7 +120,7 @@ function displayResult(data) {
     bindEditModeButton();
     bindCropModeButton();
     bindSvgButtons();
-    bindPreviewToggle();
+    bindModalControls();
     
     // 显示原图预览
     if (originalImageUrl) {
