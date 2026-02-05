@@ -291,13 +291,10 @@ def merge_similar_colors(
         f"检测到 {len(unique_colors)} 种颜色 (其中 {len(white_colors)} 种白色背景变种，{len(other_colors)} 种其他颜色)"
     )
 
-    if len(white_colors) > config.white_merge_limit:
+    if len(white_colors) > 1:
         print(f"合并 {len(white_colors)} 种白色背景变种...")
-        if white_colors:
-            avg_white = tuple(map(int, np.mean(white_colors, axis=0)))
-            white_color_map = {c: avg_white for c in white_colors}
-        else:
-            white_color_map = {}
+        avg_white = tuple(map(int, np.mean(white_colors, axis=0)))
+        white_color_map = {c: avg_white for c in white_colors}
     else:
         white_color_map = {}
 
@@ -321,14 +318,18 @@ def merge_similar_colors(
         config.max_colors + config.merge_trigger_min_overflow,
     )
 
+    def _map_color(color: Tuple[int, int, int]) -> Tuple[int, int, int]:
+        mapped = white_color_map.get(color)
+        if mapped is not None:
+            return mapped
+        mapped = black_color_map.get(color)
+        if mapped is not None:
+            return mapped
+        return similar_color_map.get(color, color)
+
     premerge_unique = set()
     for color in unique_colors:
-        mapped = white_color_map.get(color)
-        if mapped is None:
-            mapped = black_color_map.get(color)
-        if mapped is None:
-            mapped = similar_color_map.get(color, color)
-        premerge_unique.add(mapped)
+        premerge_unique.add(_map_color(color))
 
     if len(premerge_unique) <= merge_trigger:
         print(
@@ -337,13 +338,7 @@ def merge_similar_colors(
         if white_color_map or black_color_map or similar_color_map:
             merged_colors = []
             for row in colors:
-                merged_row = [
-                    black_color_map.get(
-                        white_color_map.get(similar_color_map.get(c, c), c),
-                        similar_color_map.get(c, c),
-                    )
-                    for c in row
-                ]
+                merged_row = [_map_color(c) for c in row]
                 merged_colors.append(merged_row)
             return merged_colors
         return colors

@@ -34,11 +34,11 @@ class ColorProcessingConfig:
     black_filter_threshold: int = 50
     black_cluster_ratio: float = 0.05
     dark_pixel_ratio: float = 0.08
-    white_brightness: int = 200
-    white_color_range: int = 20
+    white_brightness: int = 215
+    white_color_range: int = 12
     white_cluster_ratio: float = 0.3
     max_colors: int = 20
-    color_threshold: int = 20
+    color_threshold: int = 100
     white_merge_limit: int = 5
     protect_near_black: bool = True
     merge_trigger_ratio: float = 1.5
