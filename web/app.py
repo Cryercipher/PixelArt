@@ -162,31 +162,35 @@ def export_svg():
         width = cols * cell_size
         height = rows * cell_size
 
-        dwg = svgwrite.Drawing(size=(width, height))
-
-        # metadata 中保存原始网格
+        # metadata 中保存原始网格（使用注释形式）
         meta_payload = {
             'rows': rows,
             'cols': cols,
             'colors': colors,
             'cellSize': cell_size,
         }
-        dwg.add(dwg.metadata(json.dumps(meta_payload, ensure_ascii=False)))
-
+        meta_json = json.dumps(meta_payload, ensure_ascii=False)
+        
+        # 手动构建SVG字符串
+        svg_lines = [
+            f'<?xml version="1.0" encoding="utf-8" ?>',
+            f'<svg baseProfile="full" height="{height}" version="1.1" width="{width}" xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink">',
+            f'<!-- PIXELART_METADATA:{meta_json} -->',
+            f'<defs />'
+        ]
+        
         for i in range(rows):
             for j in range(cols):
                 color = colors[i][j]
-                dwg.add(
-                    dwg.rect(
-                        insert=(j * cell_size, i * cell_size),
-                        size=(cell_size, cell_size),
-                        fill=color,
-                        stroke='black',
-                        stroke_width=1.0,
-                    )
+                x = j * cell_size
+                y = i * cell_size
+                svg_lines.append(
+                    f'<rect fill="{color}" height="{cell_size}" stroke="black" stroke-width="1.0" width="{cell_size}" x="{x}" y="{y}" />'
                 )
-
-        svg_text = dwg.tostring()
+        
+        svg_lines.append('</svg>')
+        svg_text = '\n'.join(svg_lines)
+        
         return app.response_class(svg_text, mimetype='image/svg+xml')
     except Exception as e:
         print(f'SVG导出错误: {str(e)}')
@@ -206,17 +210,57 @@ def import_svg():
         return jsonify({'error': '没有选择文件'}), 400
 
     content = file.read()
+    
+    # 先尝试从注释中提取metadata
+    try:
+        content_str = content.decode('utf-8') if isinstance(content, bytes) else content
+        import re
+        match = re.search(r'<!-- PIXELART_METADATA:(.+?) -->', content_str, re.DOTALL)
+        if match:
+            meta_json = match.group(1)
+            meta = json.loads(meta_json)
+            colors = meta.get('colors')
+            rows = meta.get('rows')
+            cols = meta.get('cols')
+            
+            if not colors or not rows or not cols:
+                return jsonify({'error': 'metadata 数据不完整'}), 400
+            
+            color_stats = build_color_stats_from_hex_grid(colors)
+            sorted_colors = sorted(
+                color_stats.items(),
+                key=lambda x: x[1]['count'],
+                reverse=True
+            )
+            
+            return jsonify({
+                'success': True,
+                'rows': rows,
+                'cols': cols,
+                'colors': colors,
+                'colorStats': dict(sorted_colors),
+                'totalColors': len(color_stats)
+            })
+    except Exception as e:
+        print(f'注释解析失败: {str(e)}')
+    
+    # 兼容旧版本：尝试XML元素解析
     try:
         root = ET.fromstring(content)
     except Exception:
         return jsonify({'error': 'SVG 解析失败'}), 400
 
-    metadata_node = root.find('.//{*}metadata')
-    if metadata_node is None or not (metadata_node.text and metadata_node.text.strip()):
+    # 查找 desc 元素中的 metadata
+    desc_node = root.find('.//{*}desc[@id="pixelart-metadata"]')
+    if desc_node is None:
+        # 兼容旧版本的 metadata 元素
+        desc_node = root.find('.//{*}metadata')
+    
+    if desc_node is None or not (desc_node.text and desc_node.text.strip()):
         return jsonify({'error': 'SVG 缺少可导入的 metadata'}), 400
 
     try:
-        meta = json.loads(metadata_node.text.strip())
+        meta = json.loads(desc_node.text.strip())
         colors = meta.get('colors')
         rows = meta.get('rows')
         cols = meta.get('cols')

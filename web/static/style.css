@@ -22,7 +22,7 @@ body {
     font-family: 'Press Start 2P', cursive;
     background: linear-gradient(135deg, #f5deb3 0%, #e8d5a5 100%);
     color: var(--color-text);
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.8;
     image-rendering: pixelated;
     min-height: 100vh;
@@ -81,7 +81,7 @@ body {
 }
 
 .header-left h1 {
-    font-size: 9px;
+    font-size: 11px;
     color: var(--color-white);
     text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
     letter-spacing: 1px;
@@ -89,7 +89,7 @@ body {
 }
 
 .header-subtitle {
-    font-size: 7px;
+    font-size: 8px;
     color: #d4a574;
     letter-spacing: 0.5px;
     text-transform: uppercase;
@@ -154,7 +154,7 @@ body {
 }
 
 .upload-area h2 {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     margin-bottom: 10px;
     color: var(--color-accent-green);
@@ -162,7 +162,7 @@ body {
 }
 
 .upload-area p {
-    font-size: 7px;
+    font-size: 8px;
     color: var(--color-text-light);
     margin-bottom: 25px;
 }
@@ -170,7 +170,7 @@ body {
 .file-input { display: none; }
 .file-hint {
     display: block;
-    font-size: 6px;
+    font-size: 7px;
     color: var(--color-text-light);
     margin-top: 15px;
 }
@@ -180,7 +180,7 @@ body {
     color: var(--color-white);
     border: 3px solid var(--color-border);
     padding: 12px 28px;
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.1s;
@@ -200,7 +200,7 @@ body {
     border: 2px solid var(--color-border);
     color: var(--color-text);
     padding: 8px 14px;
-    font-size: 7px;
+    font-size: 8px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.1s;
@@ -252,7 +252,7 @@ body {
 }
 
 .loading-screen p {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 600;
     color: var(--color-text);
     text-transform: uppercase;
@@ -284,7 +284,7 @@ body {
     background: var(--color-white);
     border: 2px solid var(--color-border);
     box-shadow: 2px 2px 0 var(--shadow);
-    font-size: 6px;
+    font-size: 8px;
     font-family: 'Press Start 2P', cursive;
     color: var(--color-text-light);
     line-height: 1.8;
@@ -300,7 +300,7 @@ body {
     padding: 8px 10px;
     background: linear-gradient(135deg, var(--color-accent-blue) 0%, #3a5a9d 100%);
     border: 2px solid var(--color-border);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--color-white);
     box-shadow: 2px 2px 0 var(--shadow);
@@ -376,7 +376,7 @@ canvas {
 }
 
 .panel-title {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     margin-bottom: 12px;
     color: var(--color-accent-red);
@@ -421,14 +421,14 @@ canvas {
 }
 
 .color-hex {
-    font-size: 6px;
+    font-size: 7px;
     font-family: 'Courier New', monospace;
     color: var(--color-text);
     text-transform: uppercase;
 }
 
 .color-count {
-    font-size: 6px;
+    font-size: 7px;
     color: var(--color-text-light);
     margin-top: 2px;
 }
