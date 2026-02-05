@@ -118,6 +118,9 @@ def extract_colors(
 ) -> List[List[Tuple[int, int, int]]]:
     h_lines = grid_info['h_lines']
     v_lines = grid_info['v_lines']
+    
+    # 性能优化：对于大图片，使用采样而非全部像素
+    sample_step = 2 if len(h_lines) * len(v_lines) > 1000 else 1
 
     rows = len(h_lines) - 1
     cols = len(v_lines) - 1
@@ -147,7 +150,9 @@ def extract_colors(
             margin_y = max(config.margin_min, min(margin_y, cell_height // config.margin_max_divisor))
             margin_x = max(config.margin_min, min(margin_x, cell_width // config.margin_max_divisor))
 
-            cell = image[y1 + margin_y : y2 - margin_y, x1 + margin_x : x2 - margin_x]
+                # 性能优化：对于较大的单元格，使用采样减少像素数量
+                sample_step = 2 if (cell_height > 40 and cell_width > 40) else 1
+                cell = image[y1 + margin_y : y2 - margin_y : sample_step, x1 + margin_x : x2 - margin_x : sample_step]
             cell_watermark = None
             cell_edge = None
             if use_watermark_filter and watermark_mask is not None:

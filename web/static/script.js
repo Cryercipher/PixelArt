@@ -122,19 +122,11 @@ function displayResult(data) {
     bindSvgButtons();
     bindModalControls();
     
-    // 显示原图预览
+    // 显示原图按钮
     if (originalImageUrl) {
-        const originalPreview = document.getElementById('originalPreview');
-        const originalImg = document.getElementById('originalImg');
-        if (originalPreview && originalImg) {
-            originalImg.src = originalImageUrl;
-            originalPreview.style.display = 'block';
-        }
-    }
-
-    // 绘制画布
-    drawCanvas(data);
-    
+        const showBtn = document.getElementById('showOriginalBtn');
+        if (showBtn) {
+            showBtn.style.display = 'block';
     // 显示色号统计
     displayColorStats(data);
     
