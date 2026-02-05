@@ -29,8 +29,8 @@ class ColorProcessingConfig:
     margin_percent: float = 0.1
     margin_min: int = 2
     margin_max_divisor: int = 3
-        kmeans_clusters: int = 3  # 减少以提升速度
-        kmeans_n_init: int = 3  # 减少初始化次数以提升速度
+    kmeans_clusters: int = 3  # 减少以提升速度
+    kmeans_n_init: int = 3  # 减少初始化次数以提升速度
     black_filter_threshold: int = 50
     black_cluster_ratio: float = 0.05
     dark_pixel_ratio: float = 0.08

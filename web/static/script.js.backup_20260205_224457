@@ -78,22 +78,16 @@ document.addEventListener('DOMContentLoaded', () => {
             tabBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             
-            // 更新内容显示（清除内联 display，避免被上传流程隐藏）
+            // 更新内容显示
             tabContents.forEach(content => {
                 if (content.dataset.tab === targetTab) {
                     content.classList.add('active');
-                    content.style.display = '';
+                    content.style.display = 'block';
                 } else {
                     content.classList.remove('active');
                     content.style.display = 'none';
                 }
             });
-
-            // 切换到主页面或库存页面时，隐藏结果/加载区
-            const resultSection = document.getElementById('resultSection');
-            const loadingSection = document.getElementById('loading');
-            if (resultSection) resultSection.style.display = 'none';
-            if (loadingSection) loadingSection.style.display = 'none';
             
             // 如果切换到库存页面，加载库存
             if (targetTab === 'inventory') {
@@ -1403,19 +1397,6 @@ async function loadInventoryPage() {
     
     renderInventoryGrid();
     updateSelectedCount();
-    
-    // 绑定按钮事件
-    const selectAllBtn = document.getElementById('selectAllBtn');
-    const deselectAllBtn = document.getElementById('deselectAllBtn');
-    
-    if (selectAllBtn) {
-        selectAllBtn.removeEventListener('click', selectAllColors);
-        selectAllBtn.addEventListener('click', selectAllColors);
-    }
-    if (deselectAllBtn) {
-        deselectAllBtn.removeEventListener('click', deselectAllColors);
-        deselectAllBtn.addEventListener('click', deselectAllColors);
-    }
 }
 
 // 渲染库存网格

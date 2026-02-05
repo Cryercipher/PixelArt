@@ -18,12 +18,17 @@
                 </div>
                 <p class="header-subtitle">Pixel Art Analyzer</p>
             </div>
+            <!-- Tab 导航 -->
+            <nav class="tab-nav">
+                <button class="tab-btn active" data-tab="upload">Upload Image</button>
+                <button class="tab-btn" data-tab="inventory">Manage Inventory</button>
+            </nav>
         </header>
 
         <!-- 主内容区域 -->
         <main class="main-content">
             <!-- 上传区域 -->
-            <section class="upload-section" id="uploadSection">
+            <section class="upload-section tab-content active" id="uploadSection" data-tab="upload">
                 <div class="upload-card">
                     <div class="upload-area">
                         <div class="upload-icon">📤</div>
@@ -71,18 +76,14 @@
                         </span>
                     </div>
                     <div class="info-actions">
-                        <button class="btn-secondary" onclick="clearSelection()">Clear Selection</button>
-                        <button class="btn-secondary" id="editModeBtn" type="button" onclick="toggleEditMode()">Edit Mode: OFF</button>
-                        <button class="btn-secondary" id="cropModeBtn" type="button" onclick="toggleCropMode()">Crop Mode: OFF</button>
+                        <button class="btn-secondary" id="colorCardModeBtn" type="button">HEX Mode</button>
+                        <button class="btn-secondary" id="editModeBtn" type="button" onclick="toggleEditMode()">Edit Mode</button>
+                        <button class="btn-secondary" id="cropModeBtn" type="button" onclick="toggleCropMode()">Crop Mode</button>
                         <button class="btn-secondary" id="saveSvgBtn" type="button">Save SVG</button>
                         <button class="btn-secondary" id="importSvgBtn" type="button">Import SVG</button>
                         <button class="btn-secondary" onclick="resetUpload()">↻ Upload New</button>
                     </div>
                 </div>
-                <div class="info-hint" id="cropHint" style="display:none;">
-                    Crop Mode ON: Drag to select area, release to crop.
-                </div>
-
                 <input type="file" id="svgInput" accept="image/svg+xml" style="display:none;">
 
                 <!-- 原图浮窗 -->
@@ -90,7 +91,6 @@
                     <div class="modal-header">
                         <span class="modal-title">🖼️ Original Image</span>
                         <div class="modal-controls">
-                            <button class="btn-modal-control" id="toggleModalSize" type="button" title="Toggle size">⇕</button>
                             <button class="btn-modal-control" id="closeModal" type="button" title="Close">×</button>
                         </div>
                     </div>
@@ -124,9 +124,27 @@
                     </div>
                 </div>
             </section>
+
+            <!-- 库存管理区域 -->
+            <section class="inventory-section tab-content" id="inventorySection" data-tab="inventory" style="display: none;">
+                <div class="inventory-card">
+                    <div class="inventory-header">
+                        <h2>📦 Manage Your Color Inventory</h2>
+                        <p>Select the perler bead colors you own. Only these colors will be used when analyzing images.</p>
+                        <div class="inventory-actions">
+                            <button class="btn-secondary" id="selectAllBtn">✓ Select All</button>
+                            <button class="btn-secondary" id="deselectAllBtn">✗ Deselect All</button>
+                            <span class="selected-count" id="selectedCount">0 / 212 colors selected</span>
+                        </div>
+                    </div>
+                    <div class="color-inventory-grid" id="colorInventoryGrid">
+                        <!-- 将由JavaScript动态生成 -->
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}?v=20260205f"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=20260205ai"></script>
 </body>
 </html>

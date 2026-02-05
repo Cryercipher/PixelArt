@@ -119,9 +119,6 @@ def extract_colors(
     h_lines = grid_info['h_lines']
     v_lines = grid_info['v_lines']
     
-    # 性能优化：对于大图片，使用采样而非全部像素
-    sample_step = 2 if len(h_lines) * len(v_lines) > 1000 else 1
-
     rows = len(h_lines) - 1
     cols = len(v_lines) - 1
 
@@ -150,18 +147,20 @@ def extract_colors(
             margin_y = max(config.margin_min, min(margin_y, cell_height // config.margin_max_divisor))
             margin_x = max(config.margin_min, min(margin_x, cell_width // config.margin_max_divisor))
 
-                # 性能优化：对于较大的单元格，使用采样减少像素数量
-                sample_step = 2 if (cell_height > 40 and cell_width > 40) else 1
-                cell = image[y1 + margin_y : y2 - margin_y : sample_step, x1 + margin_x : x2 - margin_x : sample_step]
+            # 性能优化：对于较大的单元格，使用采样减少像素数量
+            sample_step = 2 if (cell_height > 40 and cell_width > 40) else 1
+            cell = image[y1 + margin_y : y2 - margin_y : sample_step, x1 + margin_x : x2 - margin_x : sample_step]
             cell_watermark = None
             cell_edge = None
             if use_watermark_filter and watermark_mask is not None:
                 cell_watermark = watermark_mask[
-                    y1 + margin_y : y2 - margin_y, x1 + margin_x : x2 - margin_x
+                    y1 + margin_y : y2 - margin_y : sample_step,
+                    x1 + margin_x : x2 - margin_x : sample_step,
                 ]
             if use_edge_filter and edge_mask is not None:
                 cell_edge = edge_mask[
-                    y1 + margin_y : y2 - margin_y, x1 + margin_x : x2 - margin_x
+                    y1 + margin_y : y2 - margin_y : sample_step,
+                    x1 + margin_x : x2 - margin_x : sample_step,
                 ]
 
             if cell.size == 0:
@@ -182,25 +181,38 @@ def get_dominant_color(
     watermark_mask: np.ndarray | None = None,
     edge_mask: np.ndarray | None = None,
 ) -> Tuple[int, int, int]:
-    cell_filtered = cv2.medianBlur(cell, 5)
+    # 只对足够大的cell应用medianBlur，避免尺寸问题
+    if cell.shape[0] >= 5 and cell.shape[1] >= 5:
+        cell_filtered = cv2.medianBlur(cell, 5)
+    else:
+        cell_filtered = cell
     cell_rgb = cv2.cvtColor(cell_filtered, cv2.COLOR_BGR2RGB)
     pixels = cell_rgb.reshape(-1, 3)
 
     if watermark_mask is not None:
-        mask_flat = watermark_mask.reshape(-1)
-        gray_ratio = float(np.mean(mask_flat))
-        if gray_ratio < config.watermark_cell_keep_gray_ratio:
-            filtered_pixels = pixels[~mask_flat]
-            if len(filtered_pixels) >= config.watermark_min_pixels:
-                pixels = filtered_pixels
+        # 确保mask和pixels维度匹配
+        if watermark_mask.shape[0] * watermark_mask.shape[1] != len(pixels):
+            print(f"⚠️ 维度不匹配: cell_rgb shape={cell_rgb.shape}, watermark_mask shape={watermark_mask.shape}, pixels len={len(pixels)}")
+            print(f"   cell shape={cell.shape}, cell_filtered shape={cell_filtered.shape}")
+        else:
+            mask_flat = watermark_mask.reshape(-1)
+            gray_ratio = float(np.mean(mask_flat))
+            if gray_ratio < config.watermark_cell_keep_gray_ratio:
+                filtered_pixels = pixels[~mask_flat]
+                if len(filtered_pixels) >= config.watermark_min_pixels:
+                    pixels = filtered_pixels
 
     if edge_mask is not None:
-        edge_flat = edge_mask.reshape(-1)
-        edge_ratio = float(np.mean(edge_flat))
-        if edge_ratio >= config.watermark_edge_ratio_threshold:
-            filtered_pixels = pixels[~edge_flat]
-            if len(filtered_pixels) >= config.watermark_edge_min_pixels:
-                pixels = filtered_pixels
+        # 确保mask和pixels维度匹配
+        if edge_mask.shape[0] * edge_mask.shape[1] != len(pixels):
+            print(f"⚠️ edge维度不匹配: cell_rgb shape={cell_rgb.shape}, edge_mask shape={edge_mask.shape}, pixels len={len(pixels)}")
+        else:
+            edge_flat = edge_mask.reshape(-1)
+            edge_ratio = float(np.mean(edge_flat))
+            if edge_ratio >= config.watermark_edge_ratio_threshold:
+                filtered_pixels = pixels[~edge_flat]
+                if len(filtered_pixels) >= config.watermark_edge_min_pixels:
+                    pixels = filtered_pixels
 
     if config.robust_trim_enabled and len(pixels) >= config.robust_trim_min_pixels:
         lab = cv2.cvtColor(pixels.reshape(-1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB)

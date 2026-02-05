@@ -1,0 +1,10 @@
+这是需要修复的三个问题：
+
+1. handleCanvasClick 需要变成 async function
+2. 按钮事件绑定需要移到 loadInventoryPage 函数末尾
+3. 需要移除 DOMContentLoaded 中的按钮绑定代码
+
+修复位置：
+- 行 315: function handleCanvasClick -> async function handleCanvasClick
+- 行 100-109: 移除这段代码
+- 行 1399: 在 renderInventoryGrid() 和 updateSelectedCount() 之后添加按钮绑定
