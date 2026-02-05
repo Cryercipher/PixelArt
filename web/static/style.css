@@ -213,6 +213,13 @@ body {
     transform: translate(1px, 1px);
 }
 
+.btn-secondary.active {
+    background: linear-gradient(135deg, var(--color-accent-yellow) 0%, #e8b91d 100%);
+    color: var(--color-text);
+    border: 3px solid var(--color-border);
+    box-shadow: 3px 3px 0 var(--shadow);
+}
+
 .loading-screen {
     position: fixed;
     inset: 0;

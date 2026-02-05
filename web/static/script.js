@@ -4,6 +4,7 @@ let selectedColor = null;
 let canvas = null;
 let ctx = null;
 const CELL_SIZE = 20;
+let editMode = false;
 
 // ============ 初始化 ============
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,6 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 文件选择事件
     document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+
+    // 编辑模式按钮
+    bindEditModeButton();
+    updateEditModeUI();
     
     // 画布点击事件
     canvas.addEventListener('click', handleCanvasClick);
@@ -68,7 +73,12 @@ function displayResult(data) {
     
     // 重置选择
     clearSelection();
+    editMode = false;
+    updateEditModeUI();
     
+    // 重新绑定编辑按钮（防止动态渲染导致事件丢失）
+    bindEditModeButton();
+
     // 绘制画布
     drawCanvas(data);
     
@@ -159,8 +169,84 @@ function handleCanvasClick(event) {
     
     if (row >= 0 && row < currentData.rows && col >= 0 && col < currentData.cols) {
         const clickedColor = currentData.colors[row][col];
-        selectColor(clickedColor);
+        if (editMode && selectedColor) {
+            applyColorToCell(row, col, selectedColor);
+        } else {
+            selectColor(clickedColor);
+        }
     }
+}
+
+// ============ 编辑模式切换 ============
+function toggleEditMode() {
+    editMode = !editMode;
+    updateEditModeUI();
+}
+
+window.toggleEditMode = toggleEditMode;
+
+function bindEditModeButton() {
+    const editBtn = document.getElementById('editModeBtn');
+    if (!editBtn) return;
+    editBtn.onclick = (event) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        toggleEditMode();
+    };
+}
+
+function updateEditModeUI() {
+    const editBtn = document.getElementById('editModeBtn');
+    if (!editBtn) return;
+    editBtn.textContent = editMode ? 'Edit Mode: ON' : 'Edit Mode: OFF';
+    editBtn.classList.toggle('active', editMode);
+}
+
+// ============ 应用颜色到单元格 ============
+function applyColorToCell(row, col, newColor) {
+    const oldColor = currentData.colors[row][col];
+    if (oldColor === newColor) return;
+
+    currentData.colors[row][col] = newColor;
+    updateColorStatsData(oldColor, newColor);
+    redrawWithHighlight();
+}
+
+function updateColorStatsData(oldColor, newColor) {
+    const stats = currentData.colorStats || {};
+
+    if (stats[oldColor]) {
+        stats[oldColor].count -= 1;
+        if (stats[oldColor].count <= 0) {
+            delete stats[oldColor];
+        }
+    }
+
+    if (stats[newColor]) {
+        stats[newColor].count += 1;
+    } else {
+        stats[newColor] = {
+            rgb: hexToRgbString(newColor),
+            count: 1
+        };
+    }
+
+    currentData.colorStats = stats;
+    currentData.totalColors = Object.keys(stats).length;
+    document.getElementById('colorCount').textContent = `${currentData.totalColors}`;
+
+    displayColorStats(currentData);
+    updateColorStatsSelection(selectedColor);
+}
+
+function hexToRgbString(hex) {
+    const cleaned = hex.replace('#', '');
+    const r = parseInt(cleaned.substring(0, 2), 16);
+    const g = parseInt(cleaned.substring(2, 4), 16);
+    const b = parseInt(cleaned.substring(4, 6), 16);
+    return `RGB(${r},${g},${b})`;
 }
 
 // ============ 颜色选择 ============
@@ -300,6 +386,8 @@ function updateColorStatsSelection(color) {
 function resetUpload() {
     currentData = null;
     selectedColor = null;
+    editMode = false;
+    updateEditModeUI();
     
     document.getElementById('uploadSection').style.display = 'flex';
     document.getElementById('loading').style.display = 'none';

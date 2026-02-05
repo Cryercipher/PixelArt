@@ -71,6 +71,7 @@
                     </div>
                     <div class="info-actions">
                         <button class="btn-secondary" onclick="clearSelection()">Clear Selection</button>
+                        <button class="btn-secondary" id="editModeBtn" type="button" onclick="toggleEditMode()">Edit Mode: OFF</button>
                         <button class="btn-secondary" onclick="resetUpload()">↻ Upload New</button>
                     </div>
                 </div>
@@ -98,6 +99,6 @@
         </main>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=20260205"></script>
 </body>
 </html>
