@@ -122,8 +122,65 @@ def detect_grid(image: np.ndarray, debug: bool, config: GridDetectionConfig) -> 
 
 
 def _get_grid_kernel_len(image: np.ndarray, config: GridDetectionConfig) -> int:
+    """
+    自适应计算形态学核长度。
+    先用边缘检测估算网格间距，然后选择合适的核长度。
+    """
     h, w = image.shape[:2]
+
+    # 先估算网格间距
+    estimated_spacing = _estimate_grid_spacing(image)
+
+    if estimated_spacing > 0:
+        # kernel 长度设为网格间距的 1.2 倍，确保能检测到网格线
+        adaptive_len = int(estimated_spacing * 1.2)
+        # 限制在合理范围内
+        adaptive_len = max(15, min(adaptive_len, 60))
+        return adaptive_len
+
+    # 回退到原来的计算方式
     return max(config.kernel_len_min, int(min(h, w) * config.kernel_len_ratio))
+
+
+def _estimate_grid_spacing(image: np.ndarray) -> float:
+    """
+    使用 Sobel 边缘检测估算网格间距。
+    """
+    try:
+        from scipy.signal import find_peaks
+    except ImportError:
+        return 0.0
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # 用 Sobel 检测垂直和水平边缘
+    sobel_h = np.abs(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3))
+    sobel_v = np.abs(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3))
+
+    # 投影
+    h_profile = sobel_h.sum(axis=1)
+    v_profile = sobel_v.sum(axis=0)
+
+    # 归一化
+    h_profile = h_profile / (h_profile.max() + 1e-6)
+    v_profile = v_profile / (v_profile.max() + 1e-6)
+
+    # 找峰值
+    h_peaks, _ = find_peaks(h_profile, distance=10, prominence=0.05)
+    v_peaks, _ = find_peaks(v_profile, distance=10, prominence=0.05)
+
+    # 计算中位间距
+    spacings = []
+    if len(h_peaks) > 2:
+        h_spacing = np.median(np.diff(h_peaks))
+        spacings.append(h_spacing)
+    if len(v_peaks) > 2:
+        v_spacing = np.median(np.diff(v_peaks))
+        spacings.append(v_spacing)
+
+    if spacings:
+        return float(np.mean(spacings))
+    return 0.0
 
 
 def _build_grid_kernels(kernel_len: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -177,6 +234,11 @@ def _detect_lines(
     min_line_length: int = 30,
     max_line_gap: int = 5,
 ) -> List[Tuple[int, int]]:
+    """
+    使用 Hough 变换检测线条。
+
+    angle_threshold: 与水平/垂直方向的允许角度偏差（度）
+    """
     lines = cv2.HoughLinesP(
         image,
         rho=1,
@@ -191,13 +253,19 @@ def _detect_lines(
 
     detected_lines: List[Tuple[int, int]] = []
 
+    # 使用固定的角度阈值来判断水平和垂直线
+    h_threshold = 15  # 与水平方向（0度或180度）的允许偏差
+    v_threshold = 15  # 与垂直方向（90度）的允许偏差
+
     for line in lines:
         x1, y1, x2, y2 = line[0]
         angle = np.abs(np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi)
 
-        if angle < angle_threshold or angle > 180 - angle_threshold:
+        # 水平线: 角度接近 0 或 180
+        if angle < h_threshold or angle > 180 - h_threshold:
             detected_lines.append((x1, (y1 + y2) // 2))
-        elif 90 - angle_threshold < angle < 90 + angle_threshold:
+        # 垂直线: 角度接近 90
+        elif 90 - v_threshold < angle < 90 + v_threshold:
             detected_lines.append(((x1 + x2) // 2, y1))
 
     return detected_lines
@@ -224,6 +292,9 @@ def _filter_close_lines(positions: List[int], min_distance: int = 5) -> List[int
 
 
 def _normalize_grid_positions(positions: List[int]) -> List[int]:
+    """
+    归一化网格位置，填补漏检的线条。
+    """
     if len(positions) < 3:
         return positions
 
@@ -234,17 +305,31 @@ def _normalize_grid_positions(positions: List[int]) -> List[int]:
     if spacing <= 0:
         return positions
 
-    if (np.std(diffs) / spacing) < 0.25 and np.min(diffs) > spacing * 0.6:
+    # 如果间距已经很均匀，直接返回
+    if (np.std(diffs) / spacing) < 0.2 and np.min(diffs) > spacing * 0.6:
         return positions
 
-    index_map: Dict[int, List[int]] = {}
-    base = positions[0]
-    for pos in positions:
-        idx = int(round((pos - base) / spacing))
-        index_map.setdefault(idx, []).append(pos)
+    # 检测并填补漏掉的线条
+    filled_positions = [positions[0]]
+    for i in range(1, len(positions)):
+        gap = positions[i] - positions[i - 1]
+        # 如果间距超过 1.4 倍中位数，可能漏掉了线条
+        if gap > spacing * 1.4:
+            # 计算应该有多少条线
+            num_missing = int(round(gap / spacing)) - 1
+            if num_missing > 0:
+                # 均匀插入缺失的线条
+                step = gap / (num_missing + 1)
+                for j in range(1, num_missing + 1):
+                    filled_positions.append(int(positions[i - 1] + j * step))
+        filled_positions.append(positions[i])
 
-    normalized = [int(round(np.mean(index_map[i]))) for i in sorted(index_map.keys())]
-    return normalized
+    # 填补后再次合并过近的线条
+    filled_positions = sorted(filled_positions)
+    min_dist = max(5, int(spacing * 0.4))
+    merged = _filter_close_lines(filled_positions, min_distance=min_dist)
+
+    return merged
 
 
 def _is_irregular_grid(positions: List[int], config: GridDetectionConfig) -> bool:

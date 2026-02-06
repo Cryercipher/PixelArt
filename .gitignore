@@ -1,13 +1,20 @@
-# 测试生成的文件
+# 测试和调试文件
 test_*.jpg
 test_*.svg
 test_*.txt
 test_*.png
+debug.*
+debug.jpg
+result*.png
 
 # 输出文件
 output.svg
 output.png
 color_palette.txt
+
+# 上传目录
+uploads/
+web/uploads/
 
 # Python
 __pycache__/
