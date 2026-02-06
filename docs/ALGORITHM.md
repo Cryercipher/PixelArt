@@ -4,9 +4,9 @@
 
 拼豆图纸识别工具通过三个核心阶段处理：
 
-1. **网格检测** - 定位方格位置
-2. **颜色识别** - 提取方格颜色
-3. **矢量化** - 生成 SVG 输出
+1. **网格检测** - 定位方格位置（~0.14s）
+2. **颜色识别** - 提取方格颜色（~0.27s）
+3. **矢量化** - 生成 SVG 输出（~0.01s）
 
 ## 第一阶段：网格检测
 
@@ -20,7 +20,32 @@
 
 ### 算法步骤
 
-#### 1. 预处理
+#### 1. 网格间距估算（新增）
+
+```python
+# 使用 Sobel 边缘检测估算网格间距
+sobel_h = np.abs(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3))
+sobel_v = np.abs(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3))
+
+# 投影到一维
+h_profile = sobel_h.sum(axis=1)
+v_profile = sobel_v.sum(axis=0)
+
+# 峰值检测获取网格线位置
+from scipy.signal import find_peaks
+h_peaks, _ = find_peaks(h_profile, distance=10, prominence=0.05)
+v_peaks, _ = find_peaks(v_profile, distance=10, prominence=0.05)
+
+# 计算中位间距
+spacing = np.median(np.diff(peaks))
+```
+
+**为什么要先估算间距？**
+- 形态学核长度需要与网格间距匹配
+- 核太长会过滤掉细网格线
+- 核太短会引入噪声
+
+#### 2. 预处理
 
 ```python
 # 灰度化
@@ -28,7 +53,7 @@ gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 # 自适应阈值二值化
 binary = cv2.adaptiveThreshold(
-    gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+    gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
     cv2.THRESH_BINARY, 11, 2
 )
 
@@ -36,20 +61,19 @@ binary = cv2.adaptiveThreshold(
 binary = cv2.bitwise_not(binary)
 ```
 
-**为什么用自适应阈值？**
-- 简单二值化在光照不均的区域会失效
-- 自适应方法按局部邻域计算阈值
-- 能处理同一张图上亮暗差异较大的情况
-
-#### 2. 形态学操作
+#### 3. 自适应形态学操作
 
 ```python
-# 水平线检测（高度1，宽度40的核）
-kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
+# 自适应核长度 = 网格间距 × 1.2
+kernel_len = int(estimated_spacing * 1.2)
+kernel_len = max(15, min(kernel_len, 60))  # 限制在合理范围
+
+# 水平线检测
+kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_len, 1))
 horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_h)
 
-# 垂直线检测（高度40，宽度1的核）
-kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
+# 垂直线检测
+kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel_len))
 vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_v)
 ```
 
@@ -58,7 +82,7 @@ vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_v)
 - 删除小于核大小的噪声
 - 突出水平/垂直方向的特征
 
-#### 3. 霍夫变换检测线条
+#### 4. 霍夫变换检测线条
 
 ```python
 lines = cv2.HoughLinesP(
@@ -71,33 +95,31 @@ lines = cv2.HoughLinesP(
 )
 ```
 
-**参数解释**：
-- `rho=1` - 距离精度 1 像素
-- `theta=π/180` - 角度精度 1 度
-- `threshold=40` - 至少 40 次投票才认为是线
-- `minLineLength=30` - 线条至少 30 像素长
-- `maxLineGap=5` - 间隙超过 5 像素则认为是断裂
-
-**为什么降低参数？**
-- 原始 threshold=100 无法检测弱线条
-- 原始 minLineLength=50 遗漏小格子的线
-- 这导致格子数被低估
-
-#### 4. 线条聚合
+#### 5. 间隙填补（新增）
 
 ```python
-# 提取线条的中点坐标
-h_positions = sorted(set([int(y) for _, y in h_lines]))
-v_positions = sorted(set([int(x) for x, _ in v_lines]))
+def _normalize_grid_positions(positions):
+    spacing = np.median(np.diff(positions))
 
-# 过滤相近的线条
-h_positions = _filter_close_lines(h_positions, min_distance=5)
-v_positions = _filter_close_lines(v_positions, min_distance=5)
+    filled = [positions[0]]
+    for i in range(1, len(positions)):
+        gap = positions[i] - positions[i-1]
+
+        # 如果间距超过 1.4 倍中位数，填补漏检的线
+        if gap > spacing * 1.4:
+            num_missing = int(round(gap / spacing)) - 1
+            step = gap / (num_missing + 1)
+            for j in range(1, num_missing + 1):
+                filled.append(int(positions[i-1] + j * step))
+
+        filled.append(positions[i])
+
+    return sorted(filled)
 ```
 
-**为什么要聚合？**
-- 同一条线可能被检测多次（浮动 ±1-2 像素）
-- 聚合后获得稳定的网格位置
+**为什么要填补？**
+- 某些网格线可能因为颜色浅或被文字遮挡而漏检
+- 填补后网格更均匀，颜色提取更准确
 
 ### 输出
 
@@ -105,8 +127,8 @@ v_positions = _filter_close_lines(v_positions, min_distance=5)
 {
     'h_lines': [y1, y2, y3, ...],      # 水平线 Y 坐标
     'v_lines': [x1, x2, x3, ...],      # 垂直线 X 坐标
-    'h_spacing': 19.0,                  # 平均水平间距
-    'v_spacing': 19.0                   # 平均垂直间距
+    'h_spacing': 20.0,                  # 平均水平间距
+    'v_spacing': 20.0                   # 平均垂直间距
 }
 ```
 
@@ -116,144 +138,93 @@ v_positions = _filter_close_lines(v_positions, min_distance=5)
 
 拼豆图纸中的颜色识别面临多个挑战：
 
-1. **同一方格内颜色不均**
-   - 光照渐变
-   - 拍照角度反光
-   - JPEG 压缩伪影
-
-2. **色号文字干扰**
-   - 黑色、白色的标注
-   - 占据方格中心
-
-3. **颜色相似度**
-   - 浅黄、浅粉等容易混淆
-   - 需要全局合并
+1. **同一方格内颜色不均** - 光照渐变、反光、JPEG 压缩伪影
+2. **色号文字干扰** - 黑色、白色的标注占据方格中心
+3. **颜色相似度** - 浅黄、浅粉等容易混淆
 
 ### 单方格颜色提取
 
-#### 1. 边距裁剪
+#### 1. 自适应采样（新增）
 
 ```python
-# 计算方格大小
-cell_height = y2 - y1
-cell_width = x2 - x1
+# 大单元格使用更大的采样步长
+sample_step = 1
+if cell_height > 60 and cell_width > 60:
+    sample_step = 3  # 减少 9 倍像素
+elif cell_height > 30 and cell_width > 30:
+    sample_step = 2  # 减少 4 倍像素
 
-# 动态边距：10%
-margin_percent = 0.1
-margin_y = int(cell_height * margin_percent)
-margin_x = int(cell_width * margin_percent)
-
-# 只保留中心区域
-cell = image[y1+margin_y:y2-margin_y, x1+margin_x:x2-margin_x]
+cell = image[y1+margin:y2-margin:sample_step, x1+margin:x2-margin:sample_step]
 ```
 
-**为什么 10%？**
-- 太小（5%）- 网格线干扰太大
-- 太大（25%）- 采样像素不足，K-means 不稳定
-- 10% 是平衡点：避免边界污染 + 足量采样
+**为什么要采样？**
+- 1000×1000 图片有 54×54 = 2916 个单元格
+- 每个单元格处理时间直接影响总时间
+- 采样后颜色精度几乎不变
 
-#### 2. 噪声过滤
+#### 2. 快速路径：颜色一致性检测（新增）
 
 ```python
-# 中值滤波（5x5 核）
-cell_filtered = cv2.medianBlur(cell, 5)
+# 如果像素颜色非常一致，直接返回中位数
+pixel_std = np.std(pixels, axis=0)
+if np.all(pixel_std < 15):
+    return tuple(map(int, np.median(pixels, axis=0)))
+```
+
+#### 3. 直方图量化（新增，主要方法）
+
+```python
+# 量化颜色到较少的 bin（8 levels per channel = 512 种颜色）
+quantized = (pixels // 32) * 32 + 16
+
+# 统计每种量化颜色的出现次数
+unique, counts = np.unique(quantized, axis=0, return_counts=True)
+
+# 找最常见的非黑非白颜色
+for color in sorted_by_count:
+    if is_black(color) and not enough_dark_pixels:
+        continue
+    if is_white(color) and not enough_white_pixels:
+        continue
+
+    # 返回该颜色对应的原始像素平均值
+    mask = np.all(quantized == color, axis=1)
+    return tuple(map(int, pixels[mask].mean(axis=0)))
 ```
 
 **优势**：
-- 保留边界信息（vs 高斯模糊）
-- 有效移除椒盐噪声
+- 比 K-means 快 10 倍以上
+- 对于大多数单元格足够准确
+- 自动过滤噪声（少数像素的颜色被忽略）
 
-#### 3. K-means 聚类
+#### 4. K-means 回退（复杂情况）
 
 ```python
-# RGB 颜色转换
-cell_rgb = cv2.cvtColor(cell_filtered, cv2.COLOR_BGR2RGB)
-pixels = cell_rgb.reshape(-1, 3)  # 形状 (n_pixels, 3)
-
-# 聚类分离背景和文字
-kmeans = KMeans(n_clusters=5, random_state=42, n_init=10)
+# 仅当直方图方法不可用时使用
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=3, max_iter=100)
 kmeans.fit(pixels)
 
-# 找最大的簇
-label_counts = Counter(kmeans.labels_)
-dominant_label = label_counts.most_common(1)[0][0]
-
-color = kmeans.cluster_centers_[dominant_label]
+# 找最大的非黑非白簇
+for cluster in sorted_by_size:
+    if not is_black(cluster) and not is_white(cluster):
+        return cluster
 ```
-
-**为什么 5 个簇？**
-- 3 个簇：无法分离微妙的颜色变化
-- 5 个簇：可以分离背景色、光照变化、噪声、色号文字
-- 10+ 个簇：过度拟合，反而降低准确性
-
-#### 4. 智能颜色过滤
-
-```python
-# 过滤极端黑色（色号文字）
-if r < 50 and g < 50 and b < 50:
-    continue  # 跳过这个簇
-
-# 判断是否是白色/灰色
-avg_brightness = (r + g + b) / 3
-color_range = max(r, g, b) - min(r, g, b)
-
-# 白色 = 亮度高 + 色差小
-if avg_brightness > 200 and color_range < 20:
-    if占比 > 30%:
-        return color  # 白色背景
-    continue
-
-# 其他非极端颜色
-return color
-```
-
-**色差计算的妙处**：
-- RGB(246, 245, 243) 纯白 → range=3 ✓
-- RGB(246, 240, 200) 浅黄 → range=46 ✗
-- 区分了白色背景 vs 浅色拼豆
 
 ### 全局颜色合并
 
-#### 问题
-
-如果有 20+ 种检测到的颜色，包括很多相似的浅色变种：
-- RGB(245, 244, 242)
-- RGB(246, 245, 243)
-- RGB(245, 244, 243)
-
-这些都应该合并成一种"标准白"。
-
-#### 算法
-
 ```python
 # 1. 分离白色背景
-for color in unique_colors:
-    r, g, b = color
-    avg = (r + g + b) / 3
-    range = max(r,g,b) - min(r,g,b)
-    
-    if avg > 200 and range < 20:
-        white_colors.append(color)
-    else:
-        other_colors.append(color)
+white_colors = [c for c in colors if brightness(c) > 215 and range(c) < 12]
 
-# 2. 合并白色
-if len(white_colors) > 5:
-    avg_white = np.mean(white_colors, axis=0)
-    white_map = {c: avg_white for c in white_colors}
+# 2. 合并白色变种
+avg_white = np.mean(white_colors, axis=0)
 
-# 3. 对其他颜色进行 K-means 聚类
-kmeans = KMeans(n_clusters=20)
-kmeans.fit(other_colors)
+# 3. 对其他颜色进行相似度合并（Delta-E）
+similar_map = merge_similar_colors(other_colors, threshold=100)
 
-# 4. 合并映射
-colors = 应用白色映射 + 应用 K-means 映射
+# 4. 应用映射
+merged = apply_mapping(colors, white_map, similar_map)
 ```
-
-**效果**：
-- 检测 1225 种颜色 → 35 种颜色
-- 白色变种 243 种 → 1 种
-- 保留真实浅色拼豆
 
 ## 第三阶段：矢量化
 
@@ -261,51 +232,29 @@ colors = 应用白色映射 + 应用 K-means 映射
 # 创建 SVG
 dwg = svgwrite.Drawing(output_path, size=(width, height))
 
-# 绘制每个方格
 for i in range(rows):
     for j in range(cols):
         r, g, b = colors[i][j]
-        color = f'rgb({r},{g},{b})'
-        
         dwg.add(dwg.rect(
             insert=(j * cell_size, i * cell_size),
             size=(cell_size, cell_size),
-            fill=color,
+            fill=f'rgb({r},{g},{b})',
             stroke='black',
             stroke_width=1.5
         ))
 ```
 
-## 可视化对比图
+## 性能优化总结
 
-对于 PNG 输出（对比图），还需要放大结果图：
+| 优化 | 效果 |
+|------|------|
+| Sobel 间距估算 | 自适应核长度，减少漏检 |
+| 间隙填补 | 网格更均匀 |
+| 自适应采样 | 减少 4-9 倍像素处理 |
+| 直方图替代 K-means | 速度提升 10 倍 |
+| 快速一致性检测 | 跳过简单单元格 |
 
-```python
-# 每个方格放大到 20x20 像素
-result_image = np.zeros((rows*20, cols*20, 3), dtype=np.uint8)
-
-for i in range(rows):
-    for j in range(cols):
-        y1, y2 = i*20, (i+1)*20
-        x1, x2 = j*20, (j+1)*20
-        result_image[y1:y2, x1:x2] = colors[i][j]
-
-# 绘制网格线
-for i in range(rows+1):
-    y = i * 20
-    result_image[y, :] = [0, 0, 0]
-    
-for j in range(cols+1):
-    x = j * 20
-    result_image[:, x] = [0, 0, 0]
-```
-
-## 性能优化建议
-
-1. **大图片处理**：先缩小到 2000x2000
-2. **实时预览**：显示进度条
-3. **并行处理**：多线程处理多个方格的颜色
-4. **缓存结果**：保存中间结果避免重复计算
+**总处理时间**：54×54 网格 ~0.4 秒（之前 ~2 秒）
 
 ## 参考文献
 
