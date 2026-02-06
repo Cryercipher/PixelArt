@@ -148,7 +148,11 @@ def extract_colors(
             margin_x = max(config.margin_min, min(margin_x, cell_width // config.margin_max_divisor))
 
             # 性能优化：对于较大的单元格，使用采样减少像素数量
-            sample_step = 2 if (cell_height > 40 and cell_width > 40) else 1
+            sample_step = 1
+            if cell_height > 60 and cell_width > 60:
+                sample_step = 3
+            elif cell_height > 30 and cell_width > 30:
+                sample_step = 2
             cell = image[y1 + margin_y : y2 - margin_y : sample_step, x1 + margin_x : x2 - margin_x : sample_step]
             cell_watermark = None
             cell_edge = None
@@ -192,8 +196,7 @@ def get_dominant_color(
     if watermark_mask is not None:
         # 确保mask和pixels维度匹配
         if watermark_mask.shape[0] * watermark_mask.shape[1] != len(pixels):
-            print(f"⚠️ 维度不匹配: cell_rgb shape={cell_rgb.shape}, watermark_mask shape={watermark_mask.shape}, pixels len={len(pixels)}")
-            print(f"   cell shape={cell.shape}, cell_filtered shape={cell_filtered.shape}")
+            pass  # 跳过维度不匹配的情况
         else:
             mask_flat = watermark_mask.reshape(-1)
             gray_ratio = float(np.mean(mask_flat))
@@ -205,7 +208,7 @@ def get_dominant_color(
     if edge_mask is not None:
         # 确保mask和pixels维度匹配
         if edge_mask.shape[0] * edge_mask.shape[1] != len(pixels):
-            print(f"⚠️ edge维度不匹配: cell_rgb shape={cell_rgb.shape}, edge_mask shape={edge_mask.shape}, pixels len={len(pixels)}")
+            pass  # 跳过维度不匹配的情况
         else:
             edge_flat = edge_mask.reshape(-1)
             edge_ratio = float(np.mean(edge_flat))
@@ -234,9 +237,53 @@ def get_dominant_color(
     if len(pixels) < 10:
         return tuple(map(int, pixels.mean(axis=0)))
 
+    # 快速路径：如果像素颜色非常一致，直接返回中位数
+    pixel_std = np.std(pixels, axis=0)
+    if np.all(pixel_std < 15):  # 颜色非常一致
+        return tuple(map(int, np.median(pixels, axis=0)))
+
+    # 快速路径：使用直方图方法代替K-means
+    if len(pixels) > 50:
+        # 量化颜色到较少的bin
+        quantized = (pixels // 32) * 32 + 16  # 8个level per channel
+        unique, counts = np.unique(quantized, axis=0, return_counts=True)
+
+        # 找到最常见的颜色（排除黑色）
+        sorted_indices = np.argsort(-counts)
+        for idx in sorted_indices:
+            color = unique[idx]
+            r, g, b = color
+
+            # 跳过黑色（除非黑色占比很高）
+            if r < config.black_filter_threshold and g < config.black_filter_threshold and b < config.black_filter_threshold:
+                if dark_pixel_ratio >= config.dark_pixel_ratio and (counts[idx] / len(pixels)) >= config.black_cluster_ratio:
+                    # 使用原始像素的平均值而不是量化值
+                    mask = np.all(quantized == color, axis=1)
+                    return tuple(map(int, pixels[mask].mean(axis=0)))
+                continue
+
+            # 跳过白色（除非白色占比很高）
+            avg_brightness = (int(r) + int(g) + int(b)) / 3
+            color_range = max(int(r), int(g), int(b)) - min(int(r), int(g), int(b))
+            if avg_brightness > config.white_brightness and color_range < config.white_color_range:
+                if counts[idx] / len(pixels) > config.white_cluster_ratio:
+                    mask = np.all(quantized == color, axis=1)
+                    return tuple(map(int, pixels[mask].mean(axis=0)))
+                continue
+
+            # 返回这个颜色对应的原始像素平均值
+            mask = np.all(quantized == color, axis=1)
+            return tuple(map(int, pixels[mask].mean(axis=0)))
+
+        # 如果所有颜色都被跳过，返回最常见的
+        color = unique[sorted_indices[0]]
+        mask = np.all(quantized == color, axis=1)
+        return tuple(map(int, pixels[mask].mean(axis=0)))
+
+    # 回退到K-means（仅用于小样本）
     try:
         n_clusters = min(config.kmeans_clusters, len(pixels))
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=config.kmeans_n_init)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=config.kmeans_n_init, max_iter=100)
         kmeans.fit(pixels)
 
         labels = kmeans.labels_
@@ -267,7 +314,6 @@ def get_dominant_color(
         return tuple(map(int, dominant_color))
 
     except Exception as exc:
-        print(f"K-means聚类失败: {exc}，使用中位数颜色")
         return tuple(map(int, np.median(pixels, axis=0)))
 
 

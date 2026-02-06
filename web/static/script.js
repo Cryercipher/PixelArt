@@ -1471,12 +1471,18 @@ function selectAllColors() {
     updateSelectedCount();
 }
 
+// 暴露给全局
+window.selectAllColors = selectAllColors;
+
 // 取消全选
 function deselectAllColors() {
     saveSelectedColors([]);
     renderInventoryGrid();
     updateSelectedCount();
 }
+
+// 暴露给全局
+window.deselectAllColors = deselectAllColors;
 
 // 获取已选择的色号（从localStorage）
 function getSelectedColors() {

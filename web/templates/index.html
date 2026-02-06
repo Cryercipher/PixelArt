@@ -132,8 +132,8 @@
                         <h2>📦 Manage Your Color Inventory</h2>
                         <p>Select the perler bead colors you own. Only these colors will be used when analyzing images.</p>
                         <div class="inventory-actions">
-                            <button class="btn-secondary" id="selectAllBtn">✓ Select All</button>
-                            <button class="btn-secondary" id="deselectAllBtn">✗ Deselect All</button>
+                            <button class="btn-secondary" id="selectAllBtn" type="button" onclick="selectAllColors()">✓ Select All</button>
+                            <button class="btn-secondary" id="deselectAllBtn" type="button" onclick="deselectAllColors()">✗ Deselect All</button>
                             <span class="selected-count" id="selectedCount">0 / 212 colors selected</span>
                         </div>
                     </div>
@@ -145,6 +145,6 @@
         </main>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}?v=20260205ai"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=20260205aj"></script>
 </body>
 </html>

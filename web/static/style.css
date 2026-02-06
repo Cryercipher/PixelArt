@@ -720,18 +720,6 @@ canvas {
     display: none;
 }
 
-.inventory-item.selected::after {
-    content: '★';
-    position: absolute;
-    top: 6px;
-    right: 8px;
-    font-size: 14px;
-    color: #ffe761;
-    font-weight: bold;
-    text-shadow: 2px 2px 0 rgba(0,0,0,0.35);
-    transform: rotate(-8deg);
-}
-
 .color-preview {
     flex: 1;
     width: 100%;
@@ -748,7 +736,8 @@ canvas {
     line-height: 1;
 }
 
-.color-hex {
+/* 库存管理中隐藏 hex 显示 */
+.inventory-item .color-hex {
     display: none;
 }
 
