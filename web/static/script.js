@@ -1422,15 +1422,17 @@ async function loadInventoryPage() {
 function renderInventoryGrid() {
     const grid = document.getElementById('colorInventoryGrid');
     if (!grid || allColors.length === 0) return;
-    
+
     const selectedColors = getSelectedColors();
-    // 如果是空数组（默认全选），生成所有色号的数组
-    const isAllSelected = selectedColors.length === 0;
-    
+    // 只有当 localStorage 没有保存任何数据时才视为全选（首次使用）
+    // 如果明确保存了空数组，则表示取消全选
+    const hasExplicitSelection = localStorage.getItem('selectedColors') !== null;
+    const isAllSelected = !hasExplicitSelection;
+
     grid.innerHTML = allColors.map(color => {
         const isSelected = isAllSelected || selectedColors.includes(color.code);
         return `
-            <div class="inventory-item ${isSelected ? 'selected' : ''}" 
+            <div class="inventory-item ${isSelected ? 'selected' : ''}"
                  data-code="${color.code}"
                  onclick="toggleColorSelection('${color.code}')"
                  title="${color.code} - ${color.hex}">
@@ -1444,20 +1446,21 @@ function renderInventoryGrid() {
 // 切换色号选择
 function toggleColorSelection(code) {
     let selected = getSelectedColors();
-    
-    // 如果当前是空数组（全选状态），先填充所有色号
-    if (selected.length === 0) {
+
+    // 如果首次使用（没有保存任何数据），先初始化为全选状态
+    const hasExplicitSelection = localStorage.getItem('selectedColors') !== null;
+    if (!hasExplicitSelection) {
         selected = allColors.map(c => c.code);
     }
-    
+
     const index = selected.indexOf(code);
-    
+
     if (index > -1) {
         selected.splice(index, 1);
     } else {
         selected.push(code);
     }
-    
+
     saveSelectedColors(selected);
     renderInventoryGrid();
     updateSelectedCount();
@@ -1513,8 +1516,9 @@ function updateSelectedCount() {
     const countEl = document.getElementById('selectedCount');
     if (countEl && allColors.length > 0) {
         const selected = getSelectedColors();
-        // 如果是空数组，显示全选
-        const displayCount = selected.length === 0 ? allColors.length : selected.length;
+        const hasExplicitSelection = localStorage.getItem('selectedColors') !== null;
+        // 只有首次使用（没有保存任何数据）才显示全选
+        const displayCount = !hasExplicitSelection ? allColors.length : selected.length;
         countEl.textContent = `${displayCount} / ${allColors.length} colors selected`;
     }
 }
